@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import Map from './Map'
 import ResultsCard from './ResultsCard'
@@ -9,6 +9,7 @@ const MapPage = () => {
   const [error, setError] = useState(null)
   const [showResults, setShowResults] = useState(false)
   const abortControllerRef = useRef(null)
+  const mapRef = useRef(null)
 
   const handleLocationClick = async (lat, lng) => {
     console.log('MapPage: handleLocationClick called with:', lat, lng)
@@ -52,6 +53,10 @@ const MapPage = () => {
       // Only update if this request wasn't cancelled
       if (!abortControllerRef.current.signal.aborted) {
         setAssessment(data)
+        // Notify the map component that assessment is complete
+        if (mapRef.current && mapRef.current.completeAssessment) {
+          mapRef.current.completeAssessment()
+        }
       }
     } catch (err) {
       // Ignore abort errors
@@ -77,34 +82,44 @@ const MapPage = () => {
 
   return (
     <div className="h-screen flex flex-col bg-gray-900 relative overflow-hidden">
-      {/* Top Navigation Bar - Centered Chunk */}
-      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[2000] bg-black bg-opacity-70 backdrop-blur-sm rounded-lg px-6 py-3">
-        <div className="flex items-center space-x-4">
-          <Link 
-            to="/" 
-            className="flex items-center text-white hover:text-blue-300 transition-colors duration-200"
-          >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            <span className="text-sm font-medium">Home</span>
-          </Link>
-          
-          <div className="flex items-center text-white">
-            <span className="text-lg mr-2">🌍</span>
-            <h1 className="text-lg font-semibold">Urban Planner AI</h1>
+      {/* Dynamic Island Navigation */}
+      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[2000]">
+        <div className="bg-black bg-opacity-80 backdrop-blur-lg rounded-full px-6 py-3 shadow-2xl border border-white border-opacity-20">
+          <div className="flex items-center justify-between space-x-8">
+            <Link 
+              to="/" 
+              className="flex items-center text-white hover:text-blue-300 transition-all duration-300 hover:scale-105"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              <span className="text-sm font-medium">Home</span>
+            </Link>
+            
+            <div className="flex items-center text-white">
+              <span className="text-lg mr-2">🌍</span>
+              <h1 className="text-lg font-semibold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                Urban Planner AI
+              </h1>
+            </div>
+
+            <div className="w-16"></div> {/* Spacer for centering */}
           </div>
         </div>
       </div>
 
       {/* Full-Screen Map */}
       <div className="flex-1 relative">
-        <Map onLocationClick={handleLocationClick} assessment={assessment} />
+        <Map 
+          ref={mapRef}
+          onLocationClick={handleLocationClick} 
+          assessment={assessment} 
+        />
       </div>
 
       {/* Sliding Results Panel */}
       <div 
-        className={`absolute top-4 right-0 h-[calc(100vh-2rem)] w-96 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out z-[1600] rounded-l-lg ${
+        className={`absolute top-0 right-0 h-full w-96 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out z-[1500] ${
           showResults ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -171,9 +186,9 @@ const MapPage = () => {
       {!showResults && (assessment || loading || error) && (
         <button
           onClick={() => setShowResults(true)}
-          className="absolute top-4 right-4 z-[1700] bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-lg transition-all duration-200 flex items-center space-x-2"
+          className="absolute top-20 right-4 z-[1600] bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg shadow-lg transition-all duration-200"
         >
-          <span className="text-sm font-medium">📊 View Results</span>
+          <span className="text-sm font-medium">View Results</span>
         </button>
       )}
     </div>

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react'
+import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { MapContainer, TileLayer, useMapEvents, Marker, Popup, Rectangle } from 'react-leaflet'
 import L from 'leaflet'
 
@@ -29,14 +29,22 @@ const blueIcon = L.icon({
 })
 
 // Component to handle map clicks and zoom changes
-function MapClickHandler({ onLocationClick, onZoomChange, onZoomEnd }) {
+function MapClickHandler({ onLocationClick, onZoomChange, onZoomEnd, isLoadingAssessment }) {
   const map = useMapEvents({
     click: (e) => {
+      if (isLoadingAssessment) {
+        console.log('MapClickHandler: Click ignored - assessment in progress')
+        return
+      }
       const { lat, lng } = e.latlng
       console.log('MapClickHandler: Map clicked at', lat, lng)
       onLocationClick(lat, lng)
     },
     dblclick: (e) => {
+      if (isLoadingAssessment) {
+        console.log('MapClickHandler: Double-click ignored - assessment in progress')
+        return
+      }
       const { lat, lng } = e.latlng
       console.log('MapClickHandler: Map double-clicked at', lat, lng, '(forcing fresh assessment)')
       onLocationClick(lat, lng)
@@ -64,7 +72,7 @@ function debounce(func, wait) {
   }
 }
 
-const Map = ({ onLocationClick, assessment }) => {
+const Map = forwardRef(({ onLocationClick, assessment }, ref) => {
   const mapRef = useRef(null)
   const [markerPosition, setMarkerPosition] = useState(null)
   const [showPopup, setShowPopup] = useState(false)
@@ -83,6 +91,9 @@ const Map = ({ onLocationClick, assessment }) => {
   const [showLegend, setShowLegend] = useState(true)
   const [lastBounds, setLastBounds] = useState(null)
   const [showToolsPanel, setShowToolsPanel] = useState(false)
+  const [isLoadingAssessment, setIsLoadingAssessment] = useState(false)
+  const [assessmentCancelled, setAssessmentCancelled] = useState(false)
+  const [pendingAssessment, setPendingAssessment] = useState(null)
 
   // Handle zoom changes - only update zoom level, don't regenerate grid automatically
   const handleZoomEnd = useCallback((newZoom, center) => {
@@ -154,6 +165,12 @@ const Map = ({ onLocationClick, assessment }) => {
     console.log('generateRegionalRisk called with bounds:', bounds)
     console.log('Current zoom level:', currentZoom)
     
+    // Don't generate if assessment is cancelled
+    if (assessmentCancelled) {
+      console.log('Regional risk generation cancelled')
+      return
+    }
+    
     setIsLoadingRisk(true)
     
     try {
@@ -161,49 +178,67 @@ const Map = ({ onLocationClick, assessment }) => {
       const centerLng = (bounds.east + bounds.west) / 2
       
       // Use strategic sampling with very few points for speed
-      let sampleStrategy, radiusKm
+      let sampleStrategy, radiusKm, gridDensity
       
       if (currentZoom >= 16) {
-        sampleStrategy = 'center_plus_4'  // Center + 4 cardinal directions
+        sampleStrategy = 'dense_grid'  // Dense grid for lot-level analysis
         radiusKm = 0.5    // 500m radius
+        gridDensity = 9   // 3x3 grid
       } else if (currentZoom >= 14) {
-        sampleStrategy = 'center_plus_4'
+        sampleStrategy = 'medium_grid'
         radiusKm = 1      // 1km radius
+        gridDensity = 9   // 3x3 grid
       } else if (currentZoom >= 12) {
-        sampleStrategy = 'center_plus_4'
+        sampleStrategy = 'center_plus_8'
         radiusKm = 2      // 2km radius
+        gridDensity = 9   // 3x3 grid
       } else if (currentZoom >= 10) {
         sampleStrategy = 'center_plus_8'  // Center + 8 directions
         radiusKm = 5      // 5km radius
+        gridDensity = 4   // 2x2 grid
       } else {
-        sampleStrategy = 'center_plus_8'
+        sampleStrategy = 'center_plus_4'
         radiusKm = 10     // 10km radius
+        gridDensity = 4   // 2x2 grid
       }
       
-      // Generate strategic sample points instead of dense grid
+      // Generate strategic sample points
       let coordinates = []
       
-      if (sampleStrategy === 'center_plus_4') {
-        // Just 5 points: center + north/south/east/west
+      if (sampleStrategy === 'dense_grid' || sampleStrategy === 'medium_grid') {
+        // Generate a proper grid for higher zoom levels
         const latDegreeKm = 111
         const lngDegreeKm = 111 * Math.cos(centerLat * Math.PI / 180)
         const radiusLat = radiusKm / latDegreeKm
         const radiusLng = radiusKm / lngDegreeKm
         
-        coordinates = [
-          { lat: centerLat, lng: centerLng, gridSize: 0.01 }, // Center
-          { lat: centerLat + radiusLat, lng: centerLng, gridSize: 0.01 }, // North
-          { lat: centerLat - radiusLat, lng: centerLng, gridSize: 0.01 }, // South
-          { lat: centerLat, lng: centerLng + radiusLng, gridSize: 0.01 }, // East
-          { lat: centerLat, lng: centerLng - radiusLng, gridSize: 0.01 }  // West
-        ]
-      } else {
+        const gridSize = Math.sqrt(gridDensity) // 3 for 9 points, 2 for 4 points
+        const stepLat = (radiusLat * 2) / (gridSize - 1)
+        const stepLng = (radiusLng * 2) / (gridSize - 1)
+        
+        for (let i = 0; i < gridSize; i++) {
+          for (let j = 0; j < gridSize; j++) {
+            const lat = centerLat - radiusLat + (i * stepLat)
+            const lng = centerLng - radiusLng + (j * stepLng)
+            
+            // Check if point is within circular radius
+            const distance = Math.sqrt(
+              Math.pow((lat - centerLat) * latDegreeKm, 2) + 
+              Math.pow((lng - centerLng) * lngDegreeKm, 2)
+            )
+            
+            if (distance <= radiusKm) {
+              coordinates.push({ lat, lng, gridSize: 0.01 })
+            }
+          }
+        }
+      } else if (sampleStrategy === 'center_plus_8') {
         // 9 points: center + 8 directions (N, NE, E, SE, S, SW, W, NW)
         const latDegreeKm = 111
         const lngDegreeKm = 111 * Math.cos(centerLat * Math.PI / 180)
         const radiusLat = radiusKm / latDegreeKm
         const radiusLng = radiusKm / lngDegreeKm
-        const halfRadiusLat = radiusLat * 0.7 // Slightly closer for better interpolation
+        const halfRadiusLat = radiusLat * 0.7
         const halfRadiusLng = radiusLng * 0.7
         
         coordinates = [
@@ -217,12 +252,32 @@ const Map = ({ onLocationClick, assessment }) => {
           { lat: centerLat, lng: centerLng - halfRadiusLng, gridSize: 0.01 }, // W
           { lat: centerLat + halfRadiusLat, lng: centerLng - halfRadiusLng, gridSize: 0.01 }  // NW
         ]
+      } else {
+        // center_plus_4: Just 5 points: center + north/south/east/west
+        const latDegreeKm = 111
+        const lngDegreeKm = 111 * Math.cos(centerLat * Math.PI / 180)
+        const radiusLat = radiusKm / latDegreeKm
+        const radiusLng = radiusKm / lngDegreeKm
+        
+        coordinates = [
+          { lat: centerLat, lng: centerLng, gridSize: 0.01 }, // Center
+          { lat: centerLat + radiusLat, lng: centerLng, gridSize: 0.01 }, // North
+          { lat: centerLat - radiusLat, lng: centerLng, gridSize: 0.01 }, // South
+          { lat: centerLat, lng: centerLng + radiusLng, gridSize: 0.01 }, // East
+          { lat: centerLat, lng: centerLng - radiusLng, gridSize: 0.01 }  // West
+        ]
       }
       
       console.log(`Generated ${coordinates.length} strategic sample points (${sampleStrategy}, radius: ${radiusKm}km) for zoom level ${currentZoom}`)
 
       if (coordinates.length === 0) {
         throw new Error('No coordinates generated for the selected area')
+      }
+
+      // Check if cancelled before making API call
+      if (assessmentCancelled) {
+        console.log('Regional risk generation cancelled before API call')
+        return
       }
 
       // Create timeout promise
@@ -241,6 +296,12 @@ const Map = ({ onLocationClick, assessment }) => {
 
       // Race between fetch and timeout
       const response = await Promise.race([fetchPromise, timeoutPromise])
+      
+      // Check if cancelled after API call
+      if (assessmentCancelled) {
+        console.log('Regional risk generation cancelled after API call')
+        return
+      }
       
       console.log('Bulk API response status:', response.status)
       
@@ -279,7 +340,7 @@ const Map = ({ onLocationClick, assessment }) => {
       const dominantFloodRisk = getMode(floodRisks)
       const dominantHeatRisk = getMode(heatRisks)
       
-      // Create a few interpolated rectangles to represent the area
+      // Create visualization rectangles based on grid density
       const latDegreeKm = 111
       const lngDegreeKm = 111 * Math.cos(centerLat * Math.PI / 180)
       const radiusLat = radiusKm / latDegreeKm
@@ -287,8 +348,8 @@ const Map = ({ onLocationClick, assessment }) => {
       
       const riskRectangles = []
       
-      // Create 4-9 interpolated rectangles based on strategy
-      const gridDivisions = sampleStrategy === 'center_plus_4' ? 2 : 3
+      // Create grid rectangles based on zoom level and strategy
+      const gridDivisions = Math.sqrt(gridDensity) // 2 for 4 squares, 3 for 9 squares
       const rectSizeLat = (radiusLat * 2) / gridDivisions
       const rectSizeLng = (radiusLng * 2) / gridDivisions
       
@@ -304,43 +365,63 @@ const Map = ({ onLocationClick, assessment }) => {
           )
           
           if (distance <= radiusKm) {
+            // Vary the risk slightly for visual interest while keeping dominant pattern
+            let localFloodRisk = dominantFloodRisk
+            let localHeatRisk = dominantHeatRisk
+            
+            // Add some variation based on sample data if available
+            if (validResults.length > (i * gridDivisions + j)) {
+              const sampleResult = validResults[i * gridDivisions + j]
+              if (sampleResult) {
+                localFloodRisk = sampleResult.flood_risk
+                localHeatRisk = sampleResult.heat_risk
+              }
+            }
+            
             riskRectangles.push({
-              id: `risk-interp-${i}-${j}`,
+              id: `risk-grid-${i}-${j}`,
               bounds: [
                 [rectLat - rectSizeLat/2, rectLng - rectSizeLng/2],
                 [rectLat + rectSizeLat/2, rectLng + rectSizeLng/2]
               ],
-              risk: dominantFloodRisk,
-              heatRisk: dominantHeatRisk,
-              color: getRiskColor(dominantFloodRisk),
-              borderColor: getRiskColor(dominantHeatRisk),
-              opacity: getRiskOpacity(dominantFloodRisk) * 0.7 // Slightly transparent to indicate interpolation
+              risk: localFloodRisk,
+              heatRisk: localHeatRisk,
+              color: getRiskColor(localFloodRisk),
+              borderColor: getRiskColor(localHeatRisk),
+              opacity: getRiskOpacity(localFloodRisk) * 0.8,
+              assessmentType: sampleStrategy
             })
           }
         }
       }
 
-      setRegionalRiskData(riskRectangles)
-      setLastBounds(bounds)
-      console.log(`Created ${riskRectangles.length} interpolated risk rectangles from ${coordinates.length} sample points`)
-      
-      // Show summary in console, no popup alert
-      console.log(`Strategic Regional Assessment Complete: ${coordinates.length} sample points → ${riskRectangles.length} interpolated areas in ${radiusKm}km radius`)
-      console.log(`Dominant risks - Flood: ${dominantFloodRisk}, Heat: ${dominantHeatRisk}`)
+      // Only update if not cancelled
+      if (!assessmentCancelled) {
+        setRegionalRiskData(riskRectangles)
+        setLastBounds(bounds)
+        console.log(`Created ${riskRectangles.length} risk grid rectangles from ${coordinates.length} sample points`)
+        
+        console.log(`Regional Assessment Complete: ${coordinates.length} sample points → ${riskRectangles.length} grid areas in ${radiusKm}km radius`)
+        console.log(`Strategy: ${sampleStrategy}, Dominant risks - Flood: ${dominantFloodRisk}, Heat: ${dominantHeatRisk}`)
+      }
 
     } catch (error) {
       console.error('Error generating regional risk:', error)
       let errorMessage = error.message || 'Unknown error occurred'
       
-      if (error.message === 'Request timeout') {
-        alert('Request timeout: The NASA API is taking too long to respond. Please try with a smaller area or wait a moment and try again.')
-      } else if (error.message.includes('Failed to fetch')) {
-        alert('Network error: Could not connect to the backend server. Please ensure the backend is running on port 8001.')
-      } else {
-        alert('Error generating regional risk assessment: ' + errorMessage)
+      if (!assessmentCancelled) {
+        if (error.message === 'Request timeout') {
+          alert('Request timeout: The NASA API is taking too long to respond. Please try with a smaller area or wait a moment and try again.')
+        } else if (error.message.includes('Failed to fetch')) {
+          alert('Network error: Could not connect to the backend server. Please ensure the backend is running on port 8001.')
+        } else {
+          alert('Error generating regional risk assessment: ' + errorMessage)
+        }
       }
     } finally {
-      setIsLoadingRisk(false)
+      if (!assessmentCancelled) {
+        setIsLoadingRisk(false)
+      }
     }
   }
 
@@ -435,6 +516,17 @@ const Map = ({ onLocationClick, assessment }) => {
   const handleLocationClick = (lat, lng) => {
     console.log('Map click handled:', lat, lng, 'Regional risk enabled:', showRegionalRisk)
     
+    // Prevent new clicks if already loading an assessment
+    if (isLoadingAssessment) {
+      console.log('Assessment already in progress, ignoring click')
+      return
+    }
+    
+    // Start loading assessment
+    setIsLoadingAssessment(true)
+    setAssessmentCancelled(false)
+    setPendingAssessment({ lat, lng })
+    
     // Generate bounds for regional risk based on current zoom
     const boundsSize = currentZoom >= 10 ? 0.1 : (currentZoom >= 8 ? 0.25 : 0.5)
     const bounds = {
@@ -452,11 +544,6 @@ const Map = ({ onLocationClick, assessment }) => {
     setMarkerPosition([lat, lng])
     setShowPopup(true)
     setPopupData(null) // Clear any grid-specific data
-    
-    // Auto-hide popup after 3 seconds
-    setTimeout(() => {
-      setShowPopup(false)
-    }, 3000)
     
     // Always store bounds for future use
     setLastBounds(bounds)
@@ -481,6 +568,36 @@ const Map = ({ onLocationClick, assessment }) => {
   const handleZoomChange = (zoom) => {
     setCurrentZoom(zoom)
   }
+
+  const handleCancelAssessment = () => {
+    console.log('Assessment cancelled by user')
+    setIsLoadingAssessment(false)
+    setAssessmentCancelled(true)
+    setPendingAssessment(null)
+    
+    // Auto-hide popup after cancellation
+    setTimeout(() => {
+      setShowPopup(false)
+      setAssessmentCancelled(false)
+    }, 2000)
+  }
+
+  // Function to complete assessment (call this from parent component)
+  const completeAssessment = useCallback(() => {
+    console.log('Assessment completed')
+    setIsLoadingAssessment(false)
+    setPendingAssessment(null)
+    
+    // Auto-hide popup after assessment completes
+    setTimeout(() => {
+      setShowPopup(false)
+    }, 5000)
+  }, [])
+
+  // Expose the completeAssessment function for parent component
+  useImperativeHandle(ref, () => ({
+    completeAssessment
+  }), [completeAssessment])
 
   useEffect(() => {
     if (mapRef.current) {
@@ -510,12 +627,6 @@ const Map = ({ onLocationClick, assessment }) => {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         
-        <MapClickHandler 
-          onLocationClick={handleLocationClick} 
-          onZoomChange={handleZoomChange}
-          onZoomEnd={handleZoomEnd}
-        />
-        
         {/* Regional Risk Grid */}
         {showRegionalRisk && regionalRiskData.length > 0 && console.log('Rendering', regionalRiskData.length, 'regional risk rectangles')}
         {showRegionalRisk && regionalRiskData.map((rect) => (
@@ -531,6 +642,11 @@ const Map = ({ onLocationClick, assessment }) => {
             }}
             eventHandlers={{
               click: (e) => {
+                if (isLoadingAssessment) {
+                  console.log('Grid click ignored - assessment in progress')
+                  return
+                }
+                
                 // Calculate center of the grid square
                 const centerLat = (rect.bounds[0][0] + rect.bounds[1][0]) / 2
                 const centerLng = (rect.bounds[0][1] + rect.bounds[1][1]) / 2
@@ -547,6 +663,13 @@ const Map = ({ onLocationClick, assessment }) => {
             }}
           />
         ))}
+        
+        <MapClickHandler 
+          onLocationClick={handleLocationClick} 
+          onZoomChange={handleZoomChange}
+          onZoomEnd={handleZoomEnd}
+          isLoadingAssessment={isLoadingAssessment}
+        />
         
         {markerPosition && (
           <Marker position={markerPosition} icon={blueIcon}>
@@ -616,15 +739,46 @@ const Map = ({ onLocationClick, assessment }) => {
                         </p>
                       </div>
                     </div>
-                  ) : (
-                    // Regular location popup
+                  ) : isLoadingAssessment ? (
+                    // Loading state popup
                     <div>
-                      <p className="text-sm font-medium text-gray-800 mb-1">📍 Selected Location</p>
-                      <p className="text-xs text-gray-600">
+                      <p className="text-sm font-medium text-gray-800 mb-2">� Analyzing Location</p>
+                      <p className="text-xs text-gray-600 mb-3">
                         {markerPosition[0].toFixed(4)}, {markerPosition[1].toFixed(4)}
                       </p>
-                      <p className="text-xs text-blue-600 mt-1">
-                        Assessing climate risks...
+                      <div className="flex items-center justify-center mb-3">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                      </div>
+                      <p className="text-xs text-blue-600 mb-3">
+                        Assessing climate risks from NASA data...
+                      </p>
+                      <button
+                        onClick={handleCancelAssessment}
+                        className="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-1 rounded transition-colors duration-200"
+                      >
+                        Cancel Assessment
+                      </button>
+                    </div>
+                  ) : assessmentCancelled ? (
+                    // Cancelled state popup
+                    <div>
+                      <p className="text-sm font-medium text-gray-800 mb-1">❌ Assessment Cancelled</p>
+                      <p className="text-xs text-gray-600 mb-2">
+                        {markerPosition[0].toFixed(4)}, {markerPosition[1].toFixed(4)}
+                      </p>
+                      <p className="text-xs text-red-600">
+                        Click elsewhere to start a new assessment
+                      </p>
+                    </div>
+                  ) : (
+                    // Regular location popup (completed assessment)
+                    <div>
+                      <p className="text-sm font-medium text-gray-800 mb-1">📍 Assessment Complete</p>
+                      <p className="text-xs text-gray-600 mb-2">
+                        {markerPosition[0].toFixed(4)}, {markerPosition[1].toFixed(4)}
+                      </p>
+                      <p className="text-xs text-green-600">
+                        Check results panel for detailed analysis
                       </p>
                     </div>
                   )}
@@ -752,7 +906,7 @@ const Map = ({ onLocationClick, assessment }) => {
 
       {/* Grid Info Panel */}
       {showGridInfo && selectedGrid && (
-        <div className="absolute top-4 right-4 z-[1603] bg-white bg-opacity-95 backdrop-blur-sm rounded-lg p-4 shadow-lg border border-gray-200 max-w-sm">
+        <div className="absolute top-4 right-4 z-[1003] bg-white bg-opacity-95 backdrop-blur-sm rounded-lg p-4 shadow-lg border border-gray-200 max-w-sm">
           <div className="flex items-start justify-between mb-3">
             <p className="text-sm font-medium text-gray-800">📊 Grid Square Analysis</p>
             <button
@@ -879,12 +1033,9 @@ const Map = ({ onLocationClick, assessment }) => {
             
             {/* Loading indicator for regional risk */}
             {isLoadingRisk && (
-              <div className="flex items-center space-x-2 text-blue-600 bg-blue-50 p-3 rounded-lg border border-blue-200">
+              <div className="flex items-center space-x-2 text-blue-600">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                <div>
-                  <span className="text-sm font-medium">Generating risk assessment...</span>
-                  <p className="text-xs text-blue-500">This may take 10-30 seconds</p>
-                </div>
+                <span className="text-xs">Generating risk assessment...</span>
               </div>
             )}
             
@@ -980,23 +1131,42 @@ const Map = ({ onLocationClick, assessment }) => {
         </div>
       )}
 
-      {/* Regional Risk Loading Overlay */}
-      {isLoadingRisk && (
-        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000]">
-          <div className="bg-white rounded-lg p-6 shadow-xl flex items-center space-x-4 max-w-sm mx-4">
+      {/* Attribution */}
+      <div className="absolute bottom-2 right-2 text-xs text-gray-600 bg-white bg-opacity-90 px-2 py-1 rounded shadow z-[1000]">
+        © OpenStreetMap contributors
+      </div>
+
+      {/* Assessment Loading Overlay */}
+      {isLoadingAssessment && (
+        <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center z-[2000] pointer-events-none">
+          <div className="bg-white rounded-lg p-6 shadow-xl flex items-center space-x-4 max-w-sm mx-4 pointer-events-auto">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
             <div>
-              <p className="text-lg font-medium text-gray-800">Generating Regional Risk Assessment</p>
-              <p className="text-sm text-gray-600">Analyzing climate data from NASA...</p>
+              <p className="text-lg font-medium text-gray-800">Analyzing Climate Data</p>
+              <p className="text-sm text-gray-600">Processing NASA satellite data...</p>
+              <button
+                onClick={handleCancelAssessment}
+                className="mt-2 bg-red-500 hover:bg-red-600 text-white text-sm px-4 py-1 rounded transition-colors duration-200"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Attribution */}
-      <div className="absolute bottom-2 right-2 text-xs text-gray-600 bg-white bg-opacity-90 px-2 py-1 rounded shadow z-[1000]">
-        © OpenStreetMap contributors
-      </div>
+      {/* Regional Risk Loading Overlay */}
+      {isLoadingRisk && (
+        <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center z-[1500] pointer-events-none">
+          <div className="bg-white rounded-lg p-4 shadow-xl flex items-center space-x-3 max-w-sm mx-4 pointer-events-auto">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+            <div>
+              <p className="text-sm font-medium text-gray-800">Generating Regional Grid</p>
+              <p className="text-xs text-gray-600">Analyzing area coverage...</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Custom CSS for colored markers */}
       <style jsx>{`
@@ -1015,6 +1185,8 @@ const Map = ({ onLocationClick, assessment }) => {
       `}</style>
     </div>
   )
-}
+})
+
+Map.displayName = 'Map'
 
 export default Map

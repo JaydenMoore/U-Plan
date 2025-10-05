@@ -4,30 +4,19 @@ from pydantic import BaseModel
 import requests
 import httpx
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 import logging
 from functools import lru_cache
 import time
 import os
-from io import BytesIO
-import logging
-from functools import lru_cache
-import time
-import os
-import io
-from io import BytesIO
 
-# Import population data reader
+# Import GHSL data reader
 try:
-    from population_reader import PopulationDataReader
-    POPULATION_AVAILABLE = True
+    from ghsl_reader import GHSLDataReader
+    GHSL_AVAILABLE = True
 except ImportError:
-    POPULATION_AVAILABLE = False
-    print("Population libraries not available. Install rasterio and numpy to enable population features.")
-
-# Global variables for caching
-population_reader = None
-historic_flood_dataset = None
+    GHSL_AVAILABLE = False
+    print("GHSL libraries not available. Install geopandas, shapely, fiona, pyproj to enable GHSL features.")
 
 # OpenWeatherMap API configuration
 OPENWEATHER_API_KEY = "28e7cf23db337a4fcb983071b8d85b2b"
@@ -38,34 +27,18 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Urban Planner AI", description="NASA-powered environmental risk assessment")
 
-# Initialize population data reader
-population_reader = None
-if POPULATION_AVAILABLE:
-    population_data_path = "/Users/jaydenmoore/Documents/NASA Space Apps/population density/gpw-v4-population-density-adjusted-to-2015-unwpp-country-totals_2020.tif"
-    if os.path.exists(population_data_path):
+# Initialize GHSL data reader
+ghsl_reader = None
+if GHSL_AVAILABLE:
+    ghsl_shapefile_path = "/Users/jaydenmoore/Documents/NASA Space Apps/GHSL_data_54009_shapefile/GHSL2_0_MWD_L1_tile_schema_land.shp"
+    if os.path.exists(ghsl_shapefile_path):
         try:
-            population_reader = PopulationDataReader(population_data_path)
-            logger.info("Population data loaded successfully")
+            ghsl_reader = GHSLDataReader(ghsl_shapefile_path)
+            logger.info("GHSL data loaded successfully")
         except Exception as e:
-            logger.warning(f"Failed to load population data: {e}")
+            logger.warning(f"Failed to load GHSL data: {e}")
     else:
-        logger.warning(f"Population data file not found at: {population_data_path}")
-
-# Initialize historic flood data reader (Global Flood Database)
-historic_flood_dataset = None
-historic_flood_path = "/Users/jaydenmoore/Documents/NASA Space Apps/data/global_flood_frequency.tif"
-if POPULATION_AVAILABLE:  # Use same rasterio availability check
-    if os.path.exists(historic_flood_path):
-        try:
-            import rasterio
-            historic_flood_dataset = rasterio.open(historic_flood_path)
-            logger.info("Historic flood data loaded successfully")
-        except Exception as e:
-            logger.warning(f"Failed to load historic flood data: {e}")
-    else:
-        logger.info(f"Historic flood data file not found at: {historic_flood_path} - using simulated data")
-
-# CORS middleware for frontend access
+        logger.warning(f"GHSL shapefile not found at: {ghsl_shapefile_path}")
 
 # CORS middleware for frontend access
 app.add_middleware(
@@ -107,16 +80,7 @@ class RiskAssessment(BaseModel):
     co: float
     overall_risk_score: float
     summary: str
-    population_density: Optional[float] = None  # People per km²
-    population_stats: Optional[Dict] = None  # Area population statistics
-    flood_risk_score: Optional[float] = None  # NASA MODIS flood risk (0-1)
-    flood_message: Optional[str] = None  # Flood risk interpretation
-    historic_flood_frequency: Optional[float] = None  # Historic flood frequency (0-1)
-    historic_flood_category: Optional[str] = None  # Historic flood risk category
-    # Comprehensive flood assessment combining real-time and historical data
-    comprehensive_flood_risk: Optional[Dict] = None  # Combined flood risk assessment
-    flood_percentage_explanation: Optional[Dict] = None  # Detailed percentage explanations
-    historic_flood_category: Optional[str] = None  # Historic flood category
+    ghsl_tiles: List[Dict] = []  # GHSL tile information
 
 @lru_cache(maxsize=1000)
 def fetch_nasa_power_data_cached(lat_rounded: float, lon_rounded: float) -> Dict[str, Any]:
@@ -220,78 +184,8 @@ def calculate_air_quality_risk(aqi: int, pm2_5: float, pm10: float) -> str:
     else:
         return "Very Low"
 
-def calculate_comprehensive_flood_risk(realtime_flood_score: float, historic_flood_frequency: float, lat: float, lon: float) -> Dict[str, Any]:
-    """
-    Calculate comprehensive flood risk combining real-time satellite data and historical patterns
-    
-    Args:
-        realtime_flood_score: NASA MODIS flood detection score (0-1)
-        historic_flood_frequency: Historical flood frequency (0-1)
-        lat, lon: Location coordinates
-    
-    Returns:
-        Dictionary with comprehensive flood assessment
-    """
-    # Weight factors: real-time 60%, historical 40%
-    realtime_weight = 0.60
-    historical_weight = 0.40
-    
-    # Combined flood risk score
-    combined_score = (realtime_flood_score * realtime_weight) + (historic_flood_frequency * historical_weight)
-    
-    # Determine risk level and detailed explanation
-    if combined_score >= 0.7:
-        risk_level = "Very High"
-        explanation = "Critical flood risk - immediate evacuation may be necessary"
-        color_code = "red"
-    elif combined_score >= 0.5:
-        risk_level = "High"
-        explanation = "Significant flood risk - prepare for potential evacuation"
-        color_code = "orange"
-    elif combined_score >= 0.3:
-        risk_level = "Moderate"
-        explanation = "Elevated flood risk - monitor conditions closely"
-        color_code = "yellow"
-    elif combined_score >= 0.1:
-        risk_level = "Low"
-        explanation = "Minor flood risk - stay informed of weather conditions"
-        color_code = "lightgreen"
-    else:
-        risk_level = "Very Low"
-        explanation = "Minimal flood risk - normal precautions sufficient"
-        color_code = "green"
-    
-    # Geographic context for historical percentage
-    geographic_context = ""
-    if abs(lat) < 10:
-        geographic_context = "Tropical region: High baseline risk due to intense rainfall, hurricanes, and monsoons"
-    elif abs(lat) > 60:
-        geographic_context = "High latitude region: Risk mainly from snowmelt and precipitation"
-    elif 25 < abs(lat) < 35:
-        geographic_context = "Subtropical region: Moderate risk from seasonal storms and precipitation"
-    else:
-        geographic_context = "Temperate region: Risk varies with seasonal precipitation patterns"
-    
-    return {
-        "combined_score": round(combined_score, 3),
-        "risk_level": risk_level,
-        "explanation": explanation,
-        "color_code": color_code,
-        "realtime_contribution": round(realtime_flood_score * realtime_weight, 3),
-        "historical_contribution": round(historic_flood_frequency * historical_weight, 3),
-        "geographic_context": geographic_context,
-        "percentage_explanation": {
-            "realtime_pct": f"{realtime_flood_score * 100:.1f}%",
-            "historical_pct": f"{historic_flood_frequency * 100:.1f}%",
-            "combined_pct": f"{combined_score * 100:.1f}%",
-            "realtime_meaning": "Percentage of satellite pixels showing active flooding right now",
-            "historical_meaning": "Likelihood of flooding based on 20+ years of climate data and geographic factors",
-            "combined_meaning": "Overall flood risk combining current conditions (60%) with historical patterns (40%)"
-        }
-    }
-
-def calculate_overall_risk_score(flood_risk: str, heat_risk: str, air_quality_risk: str, population_density: Optional[float] = None) -> float:
-    """Calculate overall risk score (0-10) based on individual risk factors and population context"""
+def calculate_overall_risk_score(flood_risk: str, heat_risk: str, air_quality_risk: str) -> float:
+    """Calculate overall risk score (0-10) based on individual risk factors"""
     
     # Risk level to numeric mapping
     risk_values = {
@@ -307,35 +201,14 @@ def calculate_overall_risk_score(flood_risk: str, heat_risk: str, air_quality_ri
     heat_val = risk_values.get(heat_risk, 5)
     air_val = risk_values.get(air_quality_risk, 5)
     
-    # Base weighted average: flood 30%, heat 30%, air quality 25%
-    base_score = (flood_val * 0.30) + (heat_val * 0.30) + (air_val * 0.25)
-    
-    # Population density modifier (15% weight)
-    pop_modifier = 0
-    if population_density is not None:
-        if population_density > 1000:  # Very high density
-            pop_modifier = 2.0  # Increases risk due to exposure
-        elif population_density > 500:  # High density
-            pop_modifier = 1.5
-        elif population_density > 150:  # Medium density
-            pop_modifier = 1.0
-        elif population_density > 50:  # Low density
-            pop_modifier = 0.5
-        else:  # Very low/uninhabited
-            pop_modifier = 0.0
-    
-    # Apply population modifier
-    overall_score = base_score + (pop_modifier * 0.15)
-    
-    # Ensure score stays within bounds
-    overall_score = max(0, min(10, overall_score))
+    # Weighted average: flood 35%, heat 35%, air quality 30%
+    overall_score = (flood_val * 0.35) + (heat_val * 0.35) + (air_val * 0.30)
     
     return round(overall_score, 1)
 
 def generate_summary(rainfall: float, temperature: float, flood_risk: str, heat_risk: str, 
-                    air_quality_risk: str, aqi: int, pm2_5: float, overall_risk: float,
-                    population_density: Optional[float] = None, population_stats: Optional[Dict] = None) -> str:
-    """Generate a comprehensive summary for urban planning including population context"""
+                    air_quality_risk: str, aqi: int, pm2_5: float, overall_risk: float) -> str:
+    """Generate a comprehensive summary for urban planning"""
     
     summary_parts = []
     
@@ -384,29 +257,6 @@ def generate_summary(rainfall: float, temperature: float, flood_risk: str, heat_
     elif heat_risk == "Medium":
         summary_parts.append("☀️ MODERATE HEAT RISK: Consider heat management strategies and green building standards.")
     
-    # Population context
-    if population_density is not None:
-        if population_density > 1000:
-            summary_parts.append(f"🏙️ VERY HIGH POPULATION DENSITY ({population_density:.1f} people/km²): Dense urban area requiring careful infrastructure planning and emergency services.")
-        elif population_density > 500:
-            summary_parts.append(f"🏘️ HIGH POPULATION DENSITY ({population_density:.1f} people/km²): Urban area with significant infrastructure demands.")
-        elif population_density > 150:
-            summary_parts.append(f"🏡 MEDIUM POPULATION DENSITY ({population_density:.1f} people/km²): Suburban area with moderate development pressure.")
-        elif population_density > 50:
-            summary_parts.append(f"🌲 LOW POPULATION DENSITY ({population_density:.1f} people/km²): Rural area with development potential.")
-        elif population_density > 1:
-            summary_parts.append(f"🌿 VERY LOW POPULATION DENSITY ({population_density:.1f} people/km²): Sparsely populated area.")
-        else:
-            summary_parts.append("🌍 UNINHABITED AREA: No permanent population detected.")
-    
-    # Population area statistics
-    if population_stats and "error" not in population_stats:
-        if population_stats.get("populated_pixels", 0) > 0:
-            mean_density = population_stats.get("mean_density", 0)
-            max_density = population_stats.get("max_density", 0)
-            if mean_density != population_density:  # Only show if different from point density
-                summary_parts.append(f"📊 AREA STATS (5km radius): Average {mean_density:.1f}, Peak {max_density:.1f} people/km².")
-    
     # Overall recommendation based on combined risk score
     if overall_risk >= 7:
         summary_parts.append(f"⚠️ HIGH OVERALL RISK (Score: {overall_risk}/10): Comprehensive mitigation strategies required before development.")
@@ -442,22 +292,6 @@ async def assess_location(location: LocationRequest):
         # Wait for both API calls to complete
         climate_data, air_data = await asyncio.gather(nasa_data_task, air_data_task)
         
-        # Get population data
-        population_density = None
-        population_stats = None
-        if POPULATION_AVAILABLE and population_reader:
-            try:
-                population_density = population_reader.get_population_density(location.latitude, location.longitude)
-                population_stats = population_reader.get_population_stats_in_area(location.latitude, location.longitude, radius_km=5.0)
-            except Exception as e:
-                logger.warning(f"Failed to get population data: {e}")
-        
-        # Get NASA MODIS flood data
-        flood_data = fetch_nasa_modis_flood_data(location.latitude, location.longitude)
-        
-        # Get historic flood data
-        historic_flood_data = fetch_historic_flood_frequency(location.latitude, location.longitude)
-        
         # Calculate risk levels
         risks = calculate_risk_levels(
             climate_data["rainfall_mm"], 
@@ -471,15 +305,14 @@ async def assess_location(location: LocationRequest):
             air_data["pm10"]
         )
         
-        # Calculate overall risk score (now considering population)
+        # Calculate overall risk score
         overall_risk = calculate_overall_risk_score(
             risks["flood_risk"],
             risks["heat_risk"],
-            air_quality_risk,
-            population_density
+            air_quality_risk
         )
         
-        # Generate comprehensive summary (now including population context)
+        # Generate comprehensive summary
         summary = generate_summary(
             climate_data["rainfall_mm"],
             climate_data["temperature_c"],
@@ -488,10 +321,16 @@ async def assess_location(location: LocationRequest):
             air_quality_risk,
             air_data["aqi"],
             air_data["pm2_5"],
-            overall_risk,
-            population_density,
-            population_stats
+            overall_risk
         )
+        
+        # Get GHSL tile information if available
+        ghsl_tiles = []
+        if GHSL_AVAILABLE and ghsl_reader:
+            try:
+                ghsl_tiles = ghsl_reader.find_tiles_for_location(location.latitude, location.longitude)
+            except Exception as e:
+                logger.warning(f"Failed to get GHSL tiles: {e}")
         
         return RiskAssessment(
             latitude=location.latitude,
@@ -509,12 +348,7 @@ async def assess_location(location: LocationRequest):
             co=air_data["co"],
             overall_risk_score=overall_risk,
             summary=summary,
-            population_density=population_density,
-            population_stats=population_stats,
-            flood_risk_score=flood_data["flood_risk"],
-            flood_message=flood_data["message"],
-            historic_flood_frequency=historic_flood_data["flood_frequency"],
-            historic_flood_category=historic_flood_data["category"]
+            ghsl_tiles=ghsl_tiles
         )
         
     except HTTPException:
@@ -724,156 +558,6 @@ async def fetch_air_pollution_data_async(lat: float, lng: float) -> Dict[str, fl
 # Initialize cache for air pollution function
 fetch_air_pollution_data_async.cache = {}
 
-def fetch_nasa_modis_flood_data(lat: float, lon: float) -> Dict[str, Any]:
-    """
-    Fetch NASA MODIS near-real-time flood data from ImageServer
-    Returns flood risk score (0-1) based on flood pixels
-    """
-    try:
-        # Create bounding box (±0.01° around the point)
-        buffer = 0.01
-        minx, miny = lon - buffer, lat - buffer
-        maxx, maxy = lon + buffer, lat + buffer
-        
-        # NASA Disaster Program ImageServer endpoint
-        url = "https://maps.disasters.nasa.gov/ags03/rest/services/NRT/modis_flood_1_day/ImageServer/exportImage"
-        
-        params = {
-            'bbox': f"{minx},{miny},{maxx},{maxy}",
-            'bboxSR': '4326',
-            'imageSR': '4326', 
-            'size': '256,256',
-            'format': 'tiff',
-            'f': 'image'
-        }
-        
-        logger.info(f"Fetching MODIS flood data for {lat}, {lon}")
-        response = requests.get(url, params=params, timeout=15)
-        response.raise_for_status()
-        
-        # Read TIFF response in memory with rasterio
-        import rasterio
-        import numpy as np
-        
-        with rasterio.open(BytesIO(response.content)) as dataset:
-            # Read the raster data
-            data = dataset.read(1)  # Read first band
-            
-            # Count pixels where value == 3 (flood water)
-            flood_pixels = np.count_nonzero(data == 3)
-            total_valid_pixels = np.count_nonzero(~np.isnan(data) & (data != dataset.nodata))
-            
-            if total_valid_pixels == 0:
-                flood_risk = 0.0
-                message = "No flood data available"
-            else:
-                # Compute flood risk ratio
-                flood_risk = float(flood_pixels / total_valid_pixels)
-                
-                # Generate flood message
-                if flood_risk >= 0.5:
-                    message = "High flood risk detected"
-                elif flood_risk >= 0.2:
-                    message = "Moderate flood risk detected" 
-                elif flood_risk > 0:
-                    message = "Low flood risk detected"
-                else:
-                    message = "No flood risk detected"
-        
-        logger.info(f"MODIS flood analysis: {flood_pixels}/{total_valid_pixels} flood pixels, risk={flood_risk:.3f}")
-        
-        return {
-            "flood_risk": round(flood_risk, 3),
-            "message": message,
-            "flood_pixels": int(flood_pixels),
-            "total_pixels": int(total_valid_pixels)
-        }
-        
-    except Exception as e:
-        logger.error(f"Error fetching MODIS flood data: {e}")
-        # Graceful fallback
-        return {
-            "flood_risk": 0.0,
-            "message": "Flood data unavailable",
-            "flood_pixels": 0,
-            "total_pixels": 0
-        }
-
-def fetch_nasa_modis_flood_data(lat: float, lon: float) -> Dict[str, Any]:
-    """
-    Fetch NASA MODIS near-real-time flood data from ImageServer
-    Returns flood risk score (0-1) based on flood pixels
-    """
-    try:
-        # Create bounding box (±0.01° around the point)
-        buffer = 0.01
-        minx, miny = lon - buffer, lat - buffer
-        maxx, maxy = lon + buffer, lat + buffer
-        
-        # NASA Disaster Program ImageServer endpoint
-        url = "https://maps.disasters.nasa.gov/ags03/rest/services/NRT/modis_flood_1_day/ImageServer/exportImage"
-        
-        params = {
-            'bbox': f"{minx},{miny},{maxx},{maxy}",
-            'bboxSR': '4326',
-            'imageSR': '4326', 
-            'size': '256,256',
-            'format': 'tiff',
-            'f': 'image'
-        }
-        
-        logger.info(f"Fetching MODIS flood data for {lat}, {lon}")
-        response = requests.get(url, params=params, timeout=15)
-        response.raise_for_status()
-        
-        # Read TIFF response in memory with rasterio
-        import rasterio
-        import numpy as np
-        
-        with rasterio.open(BytesIO(response.content)) as dataset:
-            # Read the raster data
-            data = dataset.read(1)  # Read first band
-            
-            # Count pixels where value == 3 (flood water)
-            flood_pixels = np.count_nonzero(data == 3)
-            total_valid_pixels = np.count_nonzero(~np.isnan(data) & (data != dataset.nodata))
-            
-            if total_valid_pixels == 0:
-                flood_risk = 0.0
-                message = "No flood data available"
-            else:
-                # Compute flood risk ratio
-                flood_risk = float(flood_pixels / total_valid_pixels)
-                
-                # Generate flood message
-                if flood_risk >= 0.5:
-                    message = "High flood risk detected"
-                elif flood_risk >= 0.2:
-                    message = "Moderate flood risk detected" 
-                elif flood_risk > 0:
-                    message = "Low flood risk detected"
-                else:
-                    message = "No flood risk detected"
-        
-        logger.info(f"MODIS flood analysis: {flood_pixels}/{total_valid_pixels} flood pixels, risk={flood_risk:.3f}")
-        
-        return {
-            "flood_risk": round(flood_risk, 3),
-            "message": message,
-            "flood_pixels": int(flood_pixels),
-            "total_pixels": int(total_valid_pixels)
-        }
-        
-    except Exception as e:
-        logger.error(f"Error fetching MODIS flood data: {e}")
-        # Graceful fallback
-        return {
-            "flood_risk": 0.0,
-            "message": "Flood data unavailable",
-            "flood_pixels": 0,
-            "total_pixels": 0
-        }
-
 def calculate_aqi_from_pm25(pm25: float) -> int:
     """Calculate AQI based on PM2.5 concentration using US EPA breakpoints"""
     
@@ -945,29 +629,6 @@ async def assess_single_location_async(lat: float, lng: float) -> RiskAssessment
             fetch_air_pollution_data_async(lat, lng)
         )
         
-        # Get population data
-        population_density = None
-        population_stats = None
-        if POPULATION_AVAILABLE and population_reader:
-            try:
-                population_density = population_reader.get_population_density(lat, lng)
-                population_stats = population_reader.get_population_stats_in_area(lat, lng, radius_km=5.0)
-            except Exception as e:
-                logger.warning(f"Failed to get population data: {e}")
-        
-        # Get NASA MODIS flood data
-        flood_data = fetch_nasa_modis_flood_data(lat, lng)
-        
-        # Get historic flood data
-        historic_flood_data = fetch_historic_flood_frequency(lat, lng)
-        
-        # Calculate comprehensive flood risk assessment
-        comprehensive_flood = calculate_comprehensive_flood_risk(
-            flood_data.get('flood_risk', 0.0),
-            historic_flood_data.get('flood_frequency', 0.0),
-            lat, lng
-        )
-        
         # Calculate risk levels
         risks = calculate_risk_levels(climate_data["rainfall_mm"], climate_data["temperature_c"])
         
@@ -978,15 +639,14 @@ async def assess_single_location_async(lat: float, lng: float) -> RiskAssessment
             air_data["pm10"]
         )
         
-        # Calculate overall risk score (now considering population)
+        # Calculate overall risk score
         overall_risk = calculate_overall_risk_score(
             risks["flood_risk"],
             risks["heat_risk"],
-            air_quality_risk,
-            population_density
+            air_quality_risk
         )
         
-        # Generate comprehensive summary (now including population context)
+        # Generate comprehensive summary
         summary = generate_summary(
             climate_data["rainfall_mm"], 
             climate_data["temperature_c"], 
@@ -995,10 +655,16 @@ async def assess_single_location_async(lat: float, lng: float) -> RiskAssessment
             air_quality_risk,
             air_data["aqi"],
             air_data["pm2_5"],
-            overall_risk,
-            population_density,
-            population_stats
+            overall_risk
         )
+        
+        # Get GHSL tile information if available
+        ghsl_tiles = []
+        if GHSL_AVAILABLE and ghsl_reader:
+            try:
+                ghsl_tiles = ghsl_reader.find_tiles_for_location(lat, lng)
+            except Exception as e:
+                logger.warning(f"Failed to get GHSL tiles: {e}")
         
         return RiskAssessment(
             latitude=lat,
@@ -1016,14 +682,7 @@ async def assess_single_location_async(lat: float, lng: float) -> RiskAssessment
             co=air_data["co"],
             overall_risk_score=overall_risk,
             summary=summary,
-            population_density=population_density,
-            population_stats=population_stats,
-            flood_risk_score=flood_data["flood_risk"],
-            flood_message=flood_data["message"],
-            historic_flood_frequency=historic_flood_data["flood_frequency"],
-            historic_flood_category=historic_flood_data["category"],
-            comprehensive_flood_risk=comprehensive_flood,
-            flood_percentage_explanation=comprehensive_flood["percentage_explanation"]
+            ghsl_tiles=ghsl_tiles
         )
     except Exception as e:
         logger.warning(f"Failed to assess coordinate {lat}, {lng}: {e}")
@@ -1135,203 +794,64 @@ def assess_single_location(lat: float, lon: float) -> RiskAssessment:
         summary=summary
     )
 
+@app.get("/ghsl/info")
+async def get_ghsl_info():
+    """Get information about available GHSL data"""
+    if not GHSL_AVAILABLE or not ghsl_reader:
+        raise HTTPException(status_code=503, detail="GHSL data not available")
+    
+    return {
+        "status": "available",
+        "data_info": ghsl_reader.get_data_info(),
+        "description": "Global Human Settlement Layer (GHSL) tiling schema for downloading settlement data"
+    }
+
+@app.post("/ghsl/tiles-for-location")
+async def get_ghsl_tiles_for_location(location: LocationRequest):
+    """Get GHSL tiles that contain a specific location"""
+    if not GHSL_AVAILABLE or not ghsl_reader:
+        raise HTTPException(status_code=503, detail="GHSL data not available")
+    
+    try:
+        tiles = ghsl_reader.find_tiles_for_location(location.latitude, location.longitude)
+        return {
+            "location": {"latitude": location.latitude, "longitude": location.longitude},
+            "tiles": tiles,
+            "tile_count": len(tiles)
+        }
+    except Exception as e:
+        logger.error(f"Error finding GHSL tiles: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing GHSL data: {str(e)}")
+
+class BoundsRequest(BaseModel):
+    north: float
+    south: float
+    east: float
+    west: float
+
+@app.post("/ghsl/tiles-in-bounds")
+async def get_ghsl_tiles_in_bounds(bounds: BoundsRequest):
+    """Get GHSL tiles that intersect with a bounding box"""
+    if not GHSL_AVAILABLE or not ghsl_reader:
+        raise HTTPException(status_code=503, detail="GHSL data not available")
+    
+    try:
+        tiles = ghsl_reader.get_tiles_in_bounds(
+            bounds.north, bounds.south, bounds.east, bounds.west
+        )
+        return {
+            "bounds": bounds.dict(),
+            "tiles": tiles,
+            "tile_count": len(tiles)
+        }
+    except Exception as e:
+        logger.error(f"Error finding GHSL tiles in bounds: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing GHSL data: {str(e)}")
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "Urban Planner AI"}
-
-def fetch_historic_flood_frequency(lat: float, lon: float) -> Dict[str, Any]:
-    """
-    Fetch historic flood frequency from Global Flood Database (2000-2018)
-    Returns flood frequency score (0-1) based on historical flood occurrence
-    """
-    try:
-        if historic_flood_dataset:
-            # Convert lat/lon to raster indices
-            row, col = historic_flood_dataset.index(lon, lat)
-            
-            # Check if coordinates are within raster bounds
-            if 0 <= row < historic_flood_dataset.height and 0 <= col < historic_flood_dataset.width:
-                # Read the flood count value at that pixel
-                import rasterio
-                window = rasterio.windows.Window(col, row, 1, 1)
-                data = historic_flood_dataset.read(1, window=window)
-                
-                if data.size > 0:
-                    flood_count = data[0, 0]
-                    
-                    # Check for no-data values
-                    import numpy as np
-                    if np.isnan(flood_count) or flood_count < 0:
-                        flood_frequency = 0.0
-                        category = "No recorded floods"
-                    else:
-                        # Normalize by 913 (total GFD events) to get score 0-1
-                        flood_frequency = min(float(flood_count) / 913.0, 1.0)
-                        
-                        # Categorize based on frequency
-                        if flood_frequency >= 0.5:
-                            category = "Very high flood history"
-                        elif flood_frequency >= 0.2:
-                            category = "High flood history"
-                        elif flood_frequency >= 0.05:
-                            category = "Moderate flood history"
-                        elif flood_frequency > 0:
-                            category = "Low flood history"
-                        else:
-                            category = "No recorded floods"
-                else:
-                    flood_frequency = 0.0
-                    category = "No recorded floods"
-            else:
-                flood_frequency = 0.0
-                category = "No recorded floods"
-        else:
-            # Simulated data when no GeoTIFF is available
-            # Use geographic heuristics for demonstration
-            flood_frequency = get_simulated_flood_frequency(lat, lon)
-            frequency_percent = flood_frequency * 100
-            
-            # Provide detailed explanations for percentage ranges
-            if flood_frequency >= 0.2:
-                category = f"High flood history ({frequency_percent:.1f}% annual probability - expect flooding every {1/flood_frequency:.0f} years)"
-            elif flood_frequency >= 0.05:
-                category = f"Moderate flood history ({frequency_percent:.1f}% annual probability - expect flooding every {1/flood_frequency:.0f} years)"
-            elif flood_frequency > 0:
-                category = f"Low flood history ({frequency_percent:.1f}% annual probability - expect flooding every {1/flood_frequency:.0f} years)"
-            else:
-                category = "No recorded floods (0% annual probability - very rare flooding expected)"
-        
-        logger.info(f"Historic flood analysis for {lat}, {lon}: frequency={flood_frequency:.3f}, category={category}")
-        
-        return {
-            "flood_frequency": round(flood_frequency, 3),
-            "category": category,
-            "source": "NASA Global Flood Database (2000–2018)"
-        }
-        
-    except Exception as e:
-        logger.error(f"Error fetching historic flood data: {e}")
-        return {
-            "flood_frequency": 0.0,
-            "category": "Historic flood data unavailable",
-            "source": "NASA Global Flood Database (2000–2018)"
-        }
-
-def get_simulated_flood_frequency(lat: float, lon: float) -> float:
-    """Generate simulated flood frequency based on geographic location"""
-    # Higher risk for coastal areas and known flood-prone regions
-    
-    # Coastal proximity (rough estimation)
-    coastal_factor = 0.0
-    if abs(lat) < 60:  # Not polar regions
-        # Distance from major coastlines (simplified)
-        if abs(lon + 95) < 5 and 25 < lat < 35:  # Gulf Coast (Houston area)
-            coastal_factor = 0.3
-        elif abs(lon + 74) < 5 and 35 < lat < 45:  # US East Coast
-            coastal_factor = 0.2
-        elif abs(lon - 122) < 5 and 32 < lat < 42:  # US West Coast
-            coastal_factor = 0.15
-        elif abs(lat) < 10:  # Tropical regions - 25% base flood frequency due to intense rainfall, hurricanes, and monsoons
-            coastal_factor = 0.25
-    
-    # River proximity (major river systems)
-    river_factor = 0.0
-    if abs(lon + 90) < 10 and 29 < lat < 50:  # Mississippi River basin
-        river_factor = 0.2
-    elif abs(lon + 105) < 15 and 25 < lat < 45:  # Great Plains (flood prone)
-        river_factor = 0.15
-    
-    # Monsoon regions
-    monsoon_factor = 0.0
-    if 70 < lon < 120 and 10 < lat < 35:  # South/Southeast Asia
-        monsoon_factor = 0.3
-    elif -60 < lon < -40 and -30 < lat < 0:  # South America
-        monsoon_factor = 0.2
-    
-    # Combine factors
-    total_frequency = min(coastal_factor + river_factor + monsoon_factor, 1.0)
-    return total_frequency
-
-@app.get("/flood-score")
-def flood_score(lat: float, lon: float):
-    """Fetch flood data from NASA ImageServer and return flood risk score."""
-    try:
-        # Validate coordinates
-        if not (-90 <= lat <= 90):
-            raise HTTPException(status_code=400, detail="Invalid latitude")
-        if not (-180 <= lon <= 180):
-            raise HTTPException(status_code=400, detail="Invalid longitude")
-        
-        flood_data = fetch_nasa_modis_flood_data(lat, lon)
-        
-        return {
-            "lat": lat,
-            "lon": lon,
-            "flood_risk": flood_data["flood_risk"],
-            "message": flood_data["message"],
-            "flood_pixels": flood_data["flood_pixels"],
-            "total_pixels": flood_data["total_pixels"]
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Flood score error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-@app.get("/historic-flood")
-def historic_flood(lat: float, lon: float):
-    """Return flood frequency (0–1) from the NASA Global Flood Database"""
-    try:
-        # Validate coordinates
-        if not (-90 <= lat <= 90):
-            raise HTTPException(status_code=400, detail="Invalid latitude")
-        if not (-180 <= lon <= 180):
-            raise HTTPException(status_code=400, detail="Invalid longitude")
-        
-        historic_data = fetch_historic_flood_frequency(lat, lon)
-        
-        return {
-            "lat": lat,
-            "lon": lon,
-            "flood_frequency": historic_data["flood_frequency"],
-            "category": historic_data["category"],
-            "source": historic_data["source"]
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Historic flood error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-@app.get("/flood-score")
-def flood_score(lat: float, lon: float):
-    """Fetch flood data from NASA ImageServer and return flood risk score."""
-    try:
-        # Validate coordinates
-        if not (-90 <= lat <= 90):
-            raise HTTPException(status_code=400, detail="Invalid latitude")
-        if not (-180 <= lon <= 180):
-            raise HTTPException(status_code=400, detail="Invalid longitude")
-        
-        flood_data = fetch_nasa_modis_flood_data(lat, lon)
-        
-        return {
-            "lat": lat,
-            "lon": lon,
-            "flood_risk": flood_data["flood_risk"],
-            "message": flood_data["message"],
-            "flood_pixels": flood_data["flood_pixels"],
-            "total_pixels": flood_data["total_pixels"]
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Flood score error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/test-nasa")
 async def test_nasa_api():

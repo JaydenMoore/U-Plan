@@ -165,6 +165,171 @@ const ResultsCard = ({ assessment }) => {
         </div>
       )}
 
+      {/* NASA MODIS Flood Data */}
+      {(assessment.flood_risk_score !== null && assessment.flood_risk_score !== undefined) && (
+        <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-4">
+          <h3 className="font-semibold text-cyan-800 mb-3 flex items-center">
+            🌊 NASA MODIS Flood Risk
+          </h3>
+          <div className="grid grid-cols-1 gap-3">
+            <div className="bg-white rounded-lg p-3 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">📡 Real-time Risk Score</span>
+                <span className={`text-lg font-bold px-2 py-1 rounded ${
+                  assessment.flood_risk_score >= 0.5 ? 'text-red-700 bg-red-100' :
+                  assessment.flood_risk_score >= 0.2 ? 'text-orange-700 bg-orange-100' :
+                  assessment.flood_risk_score > 0 ? 'text-yellow-700 bg-yellow-100' :
+                  'text-green-700 bg-green-100'
+                }`}>
+                  {(assessment.flood_risk_score * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div className="text-xs text-gray-600 mb-2">
+                {assessment.flood_message || 'No flood data available'}
+              </div>
+              <div className="text-xs text-gray-500">
+                Percentage of satellite pixels showing active flooding right now
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Historical Flooding (Global Flood Database) - Moved under real-time flooding */}
+      {(assessment.historic_flood_frequency !== null && assessment.historic_flood_frequency !== undefined) && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h3 className="font-semibold text-blue-800 mb-3 flex items-center">
+            📊 Historical Flooding (2000–2018)
+          </h3>
+          <div className="grid grid-cols-1 gap-3">
+            <div className="bg-white rounded-lg p-3 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">🕒 Annual Flood Probability</span>
+                <span className={`text-lg font-bold px-2 py-1 rounded ${
+                  assessment.historic_flood_frequency >= 0.2 ? 'text-red-700 bg-red-100' :
+                  assessment.historic_flood_frequency >= 0.05 ? 'text-orange-700 bg-orange-100' :
+                  assessment.historic_flood_frequency > 0 ? 'text-yellow-700 bg-yellow-100' :
+                  'text-green-700 bg-green-100'
+                }`}>
+                  {(assessment.historic_flood_frequency * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div className="text-xs text-gray-600 mb-2">
+                {assessment.historic_flood_category || 'Historical flood pattern analysis'}
+              </div>
+              <div className="text-xs text-gray-500">
+                Likelihood of flooding based on climate data and geographic factors (tropical regions have 25% base frequency)
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Comprehensive Flood Risk Assessment */}
+      {assessment.comprehensive_flood_risk && (
+        <div className="bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-300 rounded-lg p-4">
+          <h3 className="font-semibold text-blue-900 mb-3 flex items-center">
+            🌊📊 Combined Flood Risk Assessment
+          </h3>
+          <div className="grid grid-cols-1 gap-3">
+            <div className="bg-white rounded-lg p-3 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium text-gray-700">⚡ Overall Flood Risk</span>
+                <span className={`text-xl font-bold px-3 py-1 rounded ${
+                  assessment.comprehensive_flood_risk.risk_level === 'Very High' ? 'text-red-700 bg-red-100' :
+                  assessment.comprehensive_flood_risk.risk_level === 'High' ? 'text-orange-700 bg-orange-100' :
+                  assessment.comprehensive_flood_risk.risk_level === 'Moderate' ? 'text-yellow-700 bg-yellow-100' :
+                  assessment.comprehensive_flood_risk.risk_level === 'Low' ? 'text-blue-700 bg-blue-100' :
+                  'text-green-700 bg-green-100'
+                }`}>
+                  {assessment.comprehensive_flood_risk.combined_score ? 
+                    `${(assessment.comprehensive_flood_risk.combined_score * 100).toFixed(1)}%` : 'N/A'}
+                </span>
+              </div>
+              <div className="text-sm font-medium text-gray-800 mb-2">
+                Risk Level: {assessment.comprehensive_flood_risk.risk_level}
+              </div>
+              <div className="text-xs text-gray-600 mb-3">
+                {assessment.comprehensive_flood_risk.explanation}
+              </div>
+              
+              {/* Breakdown of risk components */}
+              <div className="bg-gray-50 rounded p-2 mb-2">
+                <div className="text-xs font-medium text-gray-700 mb-1">Risk Composition:</div>
+                <div className="flex justify-between text-xs text-gray-600">
+                  <span>Real-time (60%): {assessment.flood_percentage_explanation?.realtime_pct}</span>
+                  <span>Historical (40%): {assessment.flood_percentage_explanation?.historical_pct}</span>
+                </div>
+              </div>
+              
+              <div className="text-xs text-gray-500">
+                {assessment.comprehensive_flood_risk.geographic_context}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Population Data */}
+      {assessment.population_density !== null && assessment.population_density !== undefined && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+          <h3 className="font-semibold text-orange-800 mb-3 flex items-center">
+            👥 Population Data (GPW-v4)
+          </h3>
+          <div className="grid grid-cols-1 gap-3">
+            <div className="bg-white rounded-lg p-3 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">🎯 Point Density</span>
+                <span className="text-lg font-bold text-orange-600">
+                  {assessment.population_density?.toFixed(1)} people/km²
+                </span>
+              </div>
+              <div className="text-xs text-gray-500">
+                {assessment.population_density > 1000 ? '🏙️ Very High Density' :
+                 assessment.population_density > 500 ? '🏘️ High Density' :
+                 assessment.population_density > 150 ? '🏡 Medium Density' :
+                 assessment.population_density > 50 ? '🌲 Low Density' :
+                 assessment.population_density > 1 ? '🌿 Very Low Density' :
+                 '🌍 Uninhabited'}
+              </div>
+            </div>
+            {assessment.population_stats && !assessment.population_stats.error && (
+              <div className="bg-white rounded-lg p-3 shadow-sm">
+                <div className="text-sm font-medium text-gray-700 mb-2">📊 Area Statistics (5km radius)</div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-gray-500">Average:</span>
+                    <span className="font-semibold text-orange-600 ml-1">
+                      {assessment.population_stats.mean_density?.toFixed(1)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Peak:</span>
+                    <span className="font-semibold text-orange-600 ml-1">
+                      {assessment.population_stats.max_density?.toFixed(1)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Populated pixels:</span>
+                    <span className="font-semibold text-orange-600 ml-1">
+                      {assessment.population_stats.populated_pixels}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Category:</span>
+                    <span className="font-semibold text-orange-600 ml-1">
+                      {assessment.population_stats.population_category}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+
+
       {/* AI Summary */}
       <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
         <h3 className="font-semibold text-purple-800 mb-2">🧠 Planning Summary</h3>
@@ -175,8 +340,11 @@ const ResultsCard = ({ assessment }) => {
 
       {/* Data Source */}
       <div className="text-xs text-gray-500 text-center pt-4 border-t">
-        <p>Data source: NASA POWER API</p>
-        <p>5-year climate average (2019-2023)</p>
+        <p>Climate: NASA POWER API (5-year average 2019-2023)</p>
+        <p>Air Quality: OpenWeatherMap API</p>
+        <p>Population: GPW-v4 (NASA/CIESIN 2020)</p>
+        <p>Flood Risk: NASA MODIS (Near real-time)</p>
+        <p>Historic Floods: Global Flood Database (GFD, 2000-2018)</p>
       </div>
     </div>
   )
