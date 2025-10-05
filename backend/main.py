@@ -17,8 +17,9 @@ import os
 import io
 from io import BytesIO
 from fastapi import FastAPI, HTTPException, Request
+from rising_issues_utils import RisingIssue, infer_issue_type, group_feedback_by_proximity_and_type
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 try:
     from supabase import create_client
@@ -1323,6 +1324,56 @@ async def submit_feedback(req: FeedbackRequest, request: Request):
     except Exception as e:
         logger.error(f"Failed to store feedback: {e}")
         raise HTTPException(status_code=500, detail="Failed to store feedback")
+    
+@app.get("/rising-issues", response_model=List[RisingIssue])
+async def get_rising_issues(
+    min_reports: int = 3,
+    timeframe_days: int = 30,
+    radius_km: float = 5.0
+):
+    """
+    Aggregate user feedback to identify geographically clustered "rising issues".
+    """
+    if supabase is None:
+        logger.warning("Rising issues endpoint called but Supabase is not configured.")
+        raise HTTPException(status_code=503, detail="Service unavailable: Feedback database not configured.")
+
+    try:
+        # Calculate the start time for the query
+        since_datetime = datetime.utcnow() - timedelta(days=timeframe_days)
+        
+        logger.info(f"Fetching feedback since {since_datetime.isoformat()} for rising issues analysis.")
+
+        # Query Supabase for recent feedback
+        response = supabase.from_("feedback").select(
+            "id, latitude, longitude, feedback, summary, overall_risk_score, created_at, metadata"
+        ).gte("created_at", since_datetime.isoformat()).execute()
+
+        feedback_entries = getattr(response, 'data', [])
+        
+        if not feedback_entries:
+            logger.info("No recent feedback found to analyze for rising issues.")
+            return []
+
+        # Filter out entries without valid coordinates
+        valid_entries = [
+            entry for entry in feedback_entries 
+            if entry.get('latitude') is not None and entry.get('longitude') is not None
+        ]
+
+        # Group feedback into rising issues
+        rising_issues = group_feedback_by_proximity_and_type(
+            valid_entries, radius_km=radius_km, min_reports=min_reports
+        )
+        
+        # Sort issues by count and recency
+        rising_issues.sort(key=lambda x: (x.count, x.last_reported_at), reverse=True)
+
+        return rising_issues
+
+    except Exception as e:
+        logger.error(f"Error in /rising-issues endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An internal error occurred while analyzing rising issues.")
 
 if __name__ == "__main__":
     import uvicorn
