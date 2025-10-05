@@ -28,6 +28,7 @@ except ImportError:
 # Global variables for caching
 population_reader = None
 historic_flood_dataset = None
+from summary_agent import generate_summary
 
 # OpenWeatherMap API configuration
 OPENWEATHER_API_KEY = "28e7cf23db337a4fcb983071b8d85b2b"
@@ -331,94 +332,6 @@ def calculate_overall_risk_score(flood_risk: str, heat_risk: str, air_quality_ri
     overall_score = max(0, min(10, overall_score))
     
     return round(overall_score, 1)
-
-def generate_summary(rainfall: float, temperature: float, flood_risk: str, heat_risk: str, 
-                    air_quality_risk: str, aqi: int, pm2_5: float, overall_risk: float,
-                    population_density: Optional[float] = None, population_stats: Optional[Dict] = None) -> str:
-    """Generate a comprehensive summary for urban planning including population context"""
-    
-    summary_parts = []
-    
-    # Climate conditions
-    if temperature > 35:
-        summary_parts.append("Extreme heat conditions require robust cooling infrastructure and heat island mitigation.")
-    elif temperature > 30:
-        summary_parts.append("Hot climate requires cooling infrastructure and energy-efficient building design.")
-    elif temperature < 5:
-        summary_parts.append("Cold climate requires heating systems and weatherization measures.")
-    elif temperature < 10:
-        summary_parts.append("Cool climate requires heating considerations and insulation standards.")
-    else:
-        summary_parts.append("Moderate temperature conditions support diverse development options.")
-    
-    # Rainfall conditions
-    if rainfall > 150:
-        summary_parts.append("High rainfall area - implement comprehensive stormwater management, flood-resistant construction, and elevated foundations.")
-    elif rainfall > 100:
-        summary_parts.append("Above-average rainfall - ensure robust drainage systems and consider permeable surfaces.")
-    elif rainfall < 30:
-        summary_parts.append("Arid conditions - plan for water conservation, drought-resistant landscaping, and water storage.")
-    elif rainfall < 50:
-        summary_parts.append("Low rainfall area - consider water supply planning and efficient irrigation systems.")
-    else:
-        summary_parts.append("Moderate rainfall conditions support standard urban development practices.")
-    
-    # Air quality conditions
-    if air_quality_risk == "High":
-        summary_parts.append(f"🏭 HIGH AIR POLLUTION RISK (AQI {aqi}, PM2.5: {pm2_5:.1f}): Air filtration systems, green barriers, and emission controls essential.")
-    elif air_quality_risk == "Medium":
-        summary_parts.append(f"🌫️ MODERATE AIR POLLUTION (AQI {aqi}): Consider air quality monitoring and green infrastructure.")
-    elif air_quality_risk == "Low":
-        summary_parts.append(f"🌿 GOOD AIR QUALITY (AQI {aqi}): Favorable conditions for outdoor activities and development.")
-    else:
-        summary_parts.append(f"✨ EXCELLENT AIR QUALITY (AQI {aqi}): Optimal conditions for all development types.")
-    
-    # Risk warnings and recommendations
-    if flood_risk == "High":
-        summary_parts.append("⚠️ HIGH FLOOD RISK: Mandatory flood mitigation measures, restrict development in flood-prone areas.")
-    elif flood_risk == "Medium":
-        summary_parts.append("⚡ MODERATE FLOOD RISK: Implement flood-resistant design and drainage improvements.")
-    
-    if heat_risk == "High":
-        summary_parts.append("🌡️ HIGH HEAT RISK: Urban heat island mitigation, green infrastructure, and cooling centers recommended.")
-    elif heat_risk == "Medium":
-        summary_parts.append("☀️ MODERATE HEAT RISK: Consider heat management strategies and green building standards.")
-    
-    # Population context
-    if population_density is not None:
-        if population_density > 1000:
-            summary_parts.append(f"🏙️ VERY HIGH POPULATION DENSITY ({population_density:.1f} people/km²): Dense urban area requiring careful infrastructure planning and emergency services.")
-        elif population_density > 500:
-            summary_parts.append(f"🏘️ HIGH POPULATION DENSITY ({population_density:.1f} people/km²): Urban area with significant infrastructure demands.")
-        elif population_density > 150:
-            summary_parts.append(f"🏡 MEDIUM POPULATION DENSITY ({population_density:.1f} people/km²): Suburban area with moderate development pressure.")
-        elif population_density > 50:
-            summary_parts.append(f"🌲 LOW POPULATION DENSITY ({population_density:.1f} people/km²): Rural area with development potential.")
-        elif population_density > 1:
-            summary_parts.append(f"🌿 VERY LOW POPULATION DENSITY ({population_density:.1f} people/km²): Sparsely populated area.")
-        else:
-            summary_parts.append("🌍 UNINHABITED AREA: No permanent population detected.")
-    
-    # Population area statistics
-    if population_stats and "error" not in population_stats:
-        if population_stats.get("populated_pixels", 0) > 0:
-            mean_density = population_stats.get("mean_density", 0)
-            max_density = population_stats.get("max_density", 0)
-            if mean_density != population_density:  # Only show if different from point density
-                summary_parts.append(f"📊 AREA STATS (5km radius): Average {mean_density:.1f}, Peak {max_density:.1f} people/km².")
-    
-    # Overall recommendation based on combined risk score
-    if overall_risk >= 7:
-        summary_parts.append(f"⚠️ HIGH OVERALL RISK (Score: {overall_risk}/10): Comprehensive mitigation strategies required before development.")
-    elif overall_risk >= 5:
-        summary_parts.append(f"⚡ MODERATE OVERALL RISK (Score: {overall_risk}/10): Enhanced planning and risk management recommended.")
-    elif overall_risk >= 3:
-        summary_parts.append(f"✅ LOW OVERALL RISK (Score: {overall_risk}/10): Standard development practices with basic precautions.")
-    else:
-        summary_parts.append(f"🌟 VERY LOW OVERALL RISK (Score: {overall_risk}/10): Excellent conditions for urban development.")
-    
-    return " ".join(summary_parts)
-
 @app.get("/")
 async def root():
     return {"message": "Urban Planner AI API - Ready to assess environmental risks!"}
@@ -479,8 +392,8 @@ async def assess_location(location: LocationRequest):
             population_density
         )
         
-        # Generate comprehensive summary (now including population context)
-        summary = generate_summary(
+        # Generate comprehensive summary
+        summary = await generate_summary(
             climate_data["rainfall_mm"],
             climate_data["temperature_c"],
             risks["flood_risk"],
@@ -986,8 +899,8 @@ async def assess_single_location_async(lat: float, lng: float) -> RiskAssessment
             population_density
         )
         
-        # Generate comprehensive summary (now including population context)
-        summary = generate_summary(
+        # Generate comprehensive summary
+        summary = await generate_summary(
             climate_data["rainfall_mm"], 
             climate_data["temperature_c"], 
             risks["flood_risk"], 
@@ -1114,11 +1027,11 @@ async def assess_locations_bulk(request: BulkLocationRequest):
         logger.error(f"Bulk assessment error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-def assess_single_location(lat: float, lon: float) -> RiskAssessment:
+async def assess_single_location(lat: float, lon: float) -> RiskAssessment:
     """Assess risk for a single location (sync helper)"""
     climate_data = fetch_nasa_power_data(lat, lon)
     risks = calculate_risk_levels(climate_data["rainfall_mm"], climate_data["temperature_c"])
-    summary = generate_summary(
+    summary = await generate_summary(
         climate_data["rainfall_mm"], 
         climate_data["temperature_c"], 
         risks["flood_risk"], 
