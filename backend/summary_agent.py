@@ -17,7 +17,8 @@ else:
     logger.info("GOOGLE_API_KEY not set; using rule-based summaries.")
 
 def _build_summary_prompt(rainfall: float, temperature: float, flood_risk: str, heat_risk: str, 
-                          air_quality_risk: str, aqi: int, pm2_5: float, overall_risk: float) -> str:
+                          air_quality_risk: str, aqi: int, pm2_5: float, overall_risk: float,
+                          population_density: float = None, population_stats: dict = None) -> str:
     return f"""
 You are an urban planning assistant. Create a concise, actionable planning summary (max 120 words).
 Use clear, neutral language with a few relevant emojis similar to existing UI.
@@ -45,21 +46,23 @@ def _gemini_generate(prompt: str) -> str:
     return txt.strip() if txt else "Summary unavailable."
 
 async def generate_summary(rainfall: float, temperature: float, flood_risk: str, heat_risk: str, 
-                           air_quality_risk: str, aqi: int, pm2_5: float, overall_risk: float) -> str:
+                           air_quality_risk: str, aqi: int, pm2_5: float, overall_risk: float,
+                           population_density: float = None, population_stats: dict = None) -> str:
     if GOOGLE_API_KEY:
         try:
             logger.info("Generating summary with Google LLM (Gemini).")
-            prompt = _build_summary_prompt(rainfall, temperature, flood_risk, heat_risk, air_quality_risk, aqi, pm2_5, overall_risk)
+            prompt = _build_summary_prompt(rainfall, temperature, flood_risk, heat_risk, air_quality_risk, aqi, pm2_5, overall_risk, population_density, population_stats)
             text = await asyncio.to_thread(_gemini_generate, prompt)
             return text
         except Exception as e:
             logging.getLogger(__name__).warning(f"LLM summary failed, using rule-based. Error: {e}")
     logger.info("Generating summary with rule-based logic.")
-    return generate_summary_rule_based(rainfall, temperature, flood_risk, heat_risk, air_quality_risk, aqi, pm2_5, overall_risk)
+    return generate_summary_rule_based(rainfall, temperature, flood_risk, heat_risk, air_quality_risk, aqi, pm2_5, overall_risk, population_density, population_stats)
 
 def generate_summary_rule_based(rainfall: float, temperature: float, flood_risk: str, heat_risk: str, 
-                    air_quality_risk: str, aqi: int, pm2_5: float, overall_risk: float) -> str:
-    """Generate a comprehensive summary for urban planning"""
+                    air_quality_risk: str, aqi: int, pm2_5: float, overall_risk: float,
+                    population_density: float = None, population_stats: dict = None) -> str:
+    """Generate a comprehensive summary for urban planning including population context"""
     
     summary_parts = []
     
@@ -107,6 +110,29 @@ def generate_summary_rule_based(rainfall: float, temperature: float, flood_risk:
         summary_parts.append("🌡️ HIGH HEAT RISK: Urban heat island mitigation, green infrastructure, and cooling centers recommended.")
     elif heat_risk == "Medium":
         summary_parts.append("☀️ MODERATE HEAT RISK: Consider heat management strategies and green building standards.")
+    
+    # Population context
+    if population_density is not None:
+        if population_density > 1000:
+            summary_parts.append(f"🏙️ VERY HIGH POPULATION DENSITY ({population_density:.1f} people/km²): Dense urban area requiring careful infrastructure planning and emergency services.")
+        elif population_density > 500:
+            summary_parts.append(f"🏘️ HIGH POPULATION DENSITY ({population_density:.1f} people/km²): Urban area with significant infrastructure demands.")
+        elif population_density > 150:
+            summary_parts.append(f"🏡 MEDIUM POPULATION DENSITY ({population_density:.1f} people/km²): Suburban area with moderate development pressure.")
+        elif population_density > 50:
+            summary_parts.append(f"🌲 LOW POPULATION DENSITY ({population_density:.1f} people/km²): Rural area with development potential.")
+        elif population_density > 1:
+            summary_parts.append(f"🌿 VERY LOW POPULATION DENSITY ({population_density:.1f} people/km²): Sparsely populated area.")
+        else:
+            summary_parts.append("🌿 UNINHABITED AREA: No permanent population detected.")
+    
+    # Population area statistics
+    if population_stats and "error" not in population_stats:
+        if population_stats.get("populated_pixels", 0) > 0:
+            mean_density = population_stats.get("mean_density", 0)
+            max_density = population_stats.get("max_density", 0)
+            if max_density > mean_density * 2:
+                summary_parts.append(f"📊 VARIABLE POPULATION DENSITY in area: peaks at {max_density:.1f} people/km² with clusters requiring targeted infrastructure.")
     
     # Overall recommendation based on combined risk score
     if overall_risk >= 7:
