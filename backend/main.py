@@ -16,6 +16,14 @@ import time
 import os
 import io
 from io import BytesIO
+from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel
+from datetime import datetime
+from dotenv import load_dotenv
+try:
+    from supabase import create_client
+except Exception:
+    create_client = None
 
 # Import population data reader
 try:
@@ -37,7 +45,23 @@ OPENWEATHER_API_KEY = "28e7cf23db337a4fcb983071b8d85b2b"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Load environment variables (GOOGLE_API_KEY, SUPABASE, etc.)
+load_dotenv()
+
 app = FastAPI(title="Urban Planner AI", description="NASA-powered environmental risk assessment")
+
+# Supabase client
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+supabase = None
+if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY and create_client is not None:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+        logger.info("Supabase client initialized; feedback storage enabled.")
+    except Exception as e:
+        logger.warning(f"Failed to initialize Supabase client: {e}")
+else:
+    logger.info("Supabase env not configured; feedback endpoint will be disabled.")
 
 # Initialize population data reader
 population_reader = None
@@ -118,6 +142,15 @@ class RiskAssessment(BaseModel):
     comprehensive_flood_risk: Optional[Dict] = None  # Combined flood risk assessment
     flood_percentage_explanation: Optional[Dict] = None  # Detailed percentage explanations
     historic_flood_category: Optional[str] = None  # Historic flood category
+
+class FeedbackRequest(BaseModel):
+    latitude: float
+    longitude: float
+    feedback: str
+    summary: Optional[str] = None
+    overall_risk_score: Optional[float] = None
+    source: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 @lru_cache(maxsize=1000)
 def fetch_nasa_power_data_cached(lat_rounded: float, lon_rounded: float) -> Dict[str, Any]:
@@ -1262,6 +1295,34 @@ async def test_nasa_api():
             "status": "NASA API error",
             "error": str(e)
         }
+
+@app.post("/feedback")
+async def submit_feedback(req: FeedbackRequest, request: Request):
+    if supabase is None:
+        raise HTTPException(status_code=503, detail="Feedback storage not configured")
+    try:
+        client_ip = request.client.host if request.client else None
+        user_agent = request.headers.get("user-agent")
+        record = {
+            "latitude": req.latitude,
+            "longitude": req.longitude,
+            "feedback": req.feedback.strip(),
+            "summary": req.summary,
+            "overall_risk_score": req.overall_risk_score,
+            "source": req.source or "frontend",
+            "client_ip": client_ip,
+            "user_agent": user_agent,
+            "metadata": req.metadata or {},
+            "created_at": datetime.utcnow().isoformat()
+        }
+        resp = supabase.table("feedback").insert(record).execute()
+        data = getattr(resp, "data", None)
+        inserted_id = data[0].get("id") if data and isinstance(data, list) and len(data) else None
+        logger.info(f"Feedback stored (id={inserted_id}) for {req.latitude:.4f}, {req.longitude:.4f}")
+        return {"status": "ok", "id": inserted_id}
+    except Exception as e:
+        logger.error(f"Failed to store feedback: {e}")
+        raise HTTPException(status_code=500, detail="Failed to store feedback")
 
 if __name__ == "__main__":
     import uvicorn

@@ -32,6 +32,8 @@ Inputs:
 - AQI: {aqi}
 - PM2.5 (μg/m³): {pm2_5:.1f}
 - Overall Risk Score (0-10): {overall_risk}
+- Population Density: {population_density}
+- Population Statistics: {population_stats}
 
 Output guidance:
 - 3–6 short sentences.
@@ -52,6 +54,7 @@ async def generate_summary(rainfall: float, temperature: float, flood_risk: str,
         try:
             logger.info("Generating summary with Google LLM (Gemini).")
             prompt = _build_summary_prompt(rainfall, temperature, flood_risk, heat_risk, air_quality_risk, aqi, pm2_5, overall_risk, population_density, population_stats)
+            logger.info(f"Prompt: {prompt}")
             text = await asyncio.to_thread(_gemini_generate, prompt)
             return text
         except Exception as e:
