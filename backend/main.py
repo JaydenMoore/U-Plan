@@ -21,6 +21,15 @@ from io import BytesIO
 from scipy import stats
 import numpy as np
 from sklearn.metrics import brier_score_loss
+from fastapi import FastAPI, HTTPException, Request
+from rising_issues_utils import RisingIssue, infer_issue_type, group_feedback_by_proximity_and_type
+from pydantic import BaseModel
+from datetime import datetime, timedelta
+from dotenv import load_dotenv
+try:
+    from supabase import create_client
+except Exception:
+    create_client = None
 
 # Import population data reader
 try:
@@ -301,7 +310,23 @@ OPENWEATHER_API_KEY = "28e7cf23db337a4fcb983071b8d85b2b"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Load environment variables (GOOGLE_API_KEY, SUPABASE, etc.)
+load_dotenv()
+
 app = FastAPI(title="Urban Planner AI", description="NASA-powered environmental risk assessment")
+
+# Supabase client
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+supabase = None
+if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY and create_client is not None:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+        logger.info("Supabase client initialized; feedback storage enabled.")
+    except Exception as e:
+        logger.warning(f"Failed to initialize Supabase client: {e}")
+else:
+    logger.info("Supabase env not configured; feedback endpoint will be disabled.")
 
 # Initialize population data reader
 population_reader = None
@@ -389,6 +414,15 @@ class EnhancedRiskAssessment(RiskAssessment):
     risk_confidence_interval: Optional[Dict] = None
     vulnerability_score: Optional[float] = None
     model_uncertainty: Optional[str] = None
+
+class FeedbackRequest(BaseModel):
+    latitude: float
+    longitude: float
+    feedback: str
+    summary: Optional[str] = None
+    overall_risk_score: Optional[float] = None
+    source: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 @lru_cache(maxsize=1000)
 def fetch_nasa_power_data_cached(lat_rounded: float, lon_rounded: float) -> Dict[str, Any]:
@@ -1698,6 +1732,84 @@ async def test_nasa_api():
             "status": "NASA API error",
             "error": str(e)
         }
+
+@app.post("/feedback")
+async def submit_feedback(req: FeedbackRequest, request: Request):
+    if supabase is None:
+        raise HTTPException(status_code=503, detail="Feedback storage not configured")
+    try:
+        client_ip = request.client.host if request.client else None
+        user_agent = request.headers.get("user-agent")
+        record = {
+            "latitude": req.latitude,
+            "longitude": req.longitude,
+            "feedback": req.feedback.strip(),
+            "summary": req.summary,
+            "overall_risk_score": req.overall_risk_score,
+            "source": req.source or "frontend",
+            "client_ip": client_ip,
+            "user_agent": user_agent,
+            "metadata": req.metadata or {},
+            "created_at": datetime.utcnow().isoformat()
+        }
+        resp = supabase.table("feedback").insert(record).execute()
+        data = getattr(resp, "data", None)
+        inserted_id = data[0].get("id") if data and isinstance(data, list) and len(data) else None
+        logger.info(f"Feedback stored (id={inserted_id}) for {req.latitude:.4f}, {req.longitude:.4f}")
+        return {"status": "ok", "id": inserted_id}
+    except Exception as e:
+        logger.error(f"Failed to store feedback: {e}")
+        raise HTTPException(status_code=500, detail="Failed to store feedback")
+    
+@app.get("/rising-issues", response_model=List[RisingIssue])
+async def get_rising_issues(
+    min_reports: int = 3,
+    timeframe_days: int = 30,
+    radius_km: float = 5.0
+):
+    """
+    Aggregate user feedback to identify geographically clustered "rising issues".
+    """
+    if supabase is None:
+        logger.warning("Rising issues endpoint called but Supabase is not configured.")
+        raise HTTPException(status_code=503, detail="Service unavailable: Feedback database not configured.")
+
+    try:
+        # Calculate the start time for the query
+        since_datetime = datetime.utcnow() - timedelta(days=timeframe_days)
+        
+        logger.info(f"Fetching feedback since {since_datetime.isoformat()} for rising issues analysis.")
+
+        # Query Supabase for recent feedback
+        response = supabase.from_("feedback").select(
+            "id, latitude, longitude, feedback, summary, overall_risk_score, created_at, metadata"
+        ).gte("created_at", since_datetime.isoformat()).execute()
+
+        feedback_entries = getattr(response, 'data', [])
+        
+        if not feedback_entries:
+            logger.info("No recent feedback found to analyze for rising issues.")
+            return []
+
+        # Filter out entries without valid coordinates
+        valid_entries = [
+            entry for entry in feedback_entries 
+            if entry.get('latitude') is not None and entry.get('longitude') is not None
+        ]
+
+        # Group feedback into rising issues
+        rising_issues = group_feedback_by_proximity_and_type(
+            valid_entries, radius_km=radius_km, min_reports=min_reports
+        )
+        
+        # Sort issues by count and recency
+        rising_issues.sort(key=lambda x: (x.count, x.last_reported_at), reverse=True)
+
+        return rising_issues
+
+    except Exception as e:
+        logger.error(f"Error in /rising-issues endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An internal error occurred while analyzing rising issues.")
 
 if __name__ == "__main__":
     import uvicorn

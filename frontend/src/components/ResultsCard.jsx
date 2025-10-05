@@ -1,6 +1,12 @@
-import React from 'react'
+import React, { useState } from 'react'
 
 const ResultsCard = ({ assessment }) => {
+  const [feedback, setFeedback] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+  const [submitSuccess, setSubmitSuccess] = useState(false)
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+
   const getRiskColor = (risk) => {
     switch (risk) {
       case 'High':
@@ -24,6 +30,76 @@ const ResultsCard = ({ assessment }) => {
         return '✅'
       default:
         return '❓'
+    }
+  }
+
+  const formatSummary = (summaryText) => {
+    if (!summaryText) return null;
+
+    // Split by newline, then process each line
+    return summaryText.split('\n').map((line, index) => {
+      // Trim the line to handle spaces
+      const trimmedLine = line.trim();
+
+      // Handle list items starting with '*'
+      if (trimmedLine.startsWith('* ')) {
+        const content = trimmedLine.substring(2);
+        // Process for bold text
+        const parts = content.split(/(\*\*.*?\*\*)/g);
+        return (
+          <li key={index} className="ml-4 list-disc">
+            {parts.map((part, i) => 
+              part.startsWith('**') && part.endsWith('**') ? 
+              <strong key={i}>{part.slice(2, -2)}</strong> : 
+              part
+            )}
+          </li>
+        );
+      }
+
+      // Handle bold text in regular lines
+      const parts = trimmedLine.split(/(\*\*.*?\*\*)/g);
+      return (
+        <p key={index}>
+          {parts.map((part, i) => 
+            part.startsWith('**') && part.endsWith('**') ? 
+            <strong key={i}>{part.slice(2, -2)}</strong> : 
+            part
+          )}
+        </p>
+      );
+    });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!feedback.trim()) return
+    setSubmitting(true)
+    setSubmitError('')
+    setSubmitSuccess(false)
+    try {
+      const res = await fetch(`${API_BASE}/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          latitude: assessment.latitude,
+          longitude: assessment.longitude,
+          summary: assessment.summary,
+          overall_risk_score: assessment.overall_risk_score,
+          feedback,
+          source: 'frontend'
+        })
+      })
+      if (!res.ok) {
+        const msg = await res.text()
+        throw new Error(msg || 'Failed to submit feedback')
+      }
+      setSubmitSuccess(true)
+      setFeedback('')
+    } catch (err) {
+      setSubmitError(err.message || 'Failed to submit feedback')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -423,8 +499,37 @@ const ResultsCard = ({ assessment }) => {
       <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
         <h3 className="font-semibold text-purple-800 mb-2">🧠 Planning Summary</h3>
         <p className="text-sm text-purple-700 leading-relaxed">
-          {assessment.summary}
+          {formatSummary(assessment.summary)}
         </p>
+      </div>
+
+      {/* Feedback Form */}
+      <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <h3 className="font-semibold text-gray-800 mb-2">💬 Spot a Change? Report It.</h3>
+        <form onSubmit={handleSubmit} className="space-y-2">
+          <textarea
+            className="w-full border border-gray-300 rounded p-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
+            rows={3}
+            placeholder="Tell us if this summary was helpful or what to improve..."
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="submit"
+              disabled={submitting || !feedback.trim()}
+              className={`px-3 py-2 rounded text-white text-sm ${submitting || !feedback.trim() ? 'bg-gray-400' : 'bg-purple-600 hover:bg-purple-700'}`}
+            >
+              {submitting ? 'Submitting…' : 'Submit'}
+            </button>
+            {submitSuccess && (
+              <span className="text-green-600 text-sm">Thanks! Feedback saved.</span>
+            )}
+            {submitError && (
+              <span className="text-red-600 text-sm">{submitError}</span>
+            )}
+          </div>
+        </form>
       </div>
 
       {/* Data Source */}

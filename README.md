@@ -100,6 +100,13 @@ Create `.env` file in `/frontend` with your Mapbox token:
 VITE_MAPBOX_TOKEN=pk.eyJ1IjoieW91cm5hbWUiLCJhIjoiY2xjZ2FybHFlMDFlZzNrbW9ndWZ4NXhqNiJ9.abc123xyz
 ```
 
+Create `.env` file in `/backend`
+```bash
+GOOGLE_API_KEY=AIzaSyArnO_iLwEAsTQkCPKoq3Atm-SxF57ggBk
+SUPABASE_URL=https://cfxdoiwlxlibralnjrpr.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmeGRvaXdseGxpYnJhbG5qcnByIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1OTY0NjUwOSwiZXhwIjoyMDc1MjIyNTA5fQ.CqF9o7EBGlYTcw4bViVsZsIB1ck2V3yI0_XOVK2OUIA
+```
+
 #### ▶️ Start the frontend
 
 ```bash
