@@ -378,7 +378,7 @@ const ResultsCard = ({ assessment }) => {
 
       {/* Feedback Form */}
       <div className="bg-white border border-gray-200 rounded-lg p-4">
-        <h3 className="font-semibold text-gray-800 mb-2">💬 Give your Feedback</h3>
+        <h3 className="font-semibold text-gray-800 mb-2">💬 Spot a Change? Report It.</h3>
         <form onSubmit={handleSubmit} className="space-y-2">
           <textarea
             className="w-full border border-gray-300 rounded p-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
@@ -393,7 +393,7 @@ const ResultsCard = ({ assessment }) => {
               disabled={submitting || !feedback.trim()}
               className={`px-3 py-2 rounded text-white text-sm ${submitting || !feedback.trim() ? 'bg-gray-400' : 'bg-purple-600 hover:bg-purple-700'}`}
             >
-              {submitting ? 'Submitting…' : 'Submit Feedback'}
+              {submitting ? 'Submitting…' : 'Submit'}
             </button>
             {submitSuccess && (
               <span className="text-green-600 text-sm">Thanks! Feedback saved.</span>

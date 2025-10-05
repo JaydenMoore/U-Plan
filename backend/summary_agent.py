@@ -36,9 +36,12 @@ Inputs:
 - Population Statistics: {population_stats}
 
 Output guidance:
-- 3–6 short sentences.
-- Call out any “High” risks with clear mitigations.
-- Keep tone practical for city planning.
+List down in point form overall risk score, environmental risk (air quality, flood and heat risk) and if population density insight if data is provided. (with suggestions associated with the value)
+Call out any "high" risks with clear mitigations
+Bold "high" or "low"
+Extended suggestions for residents (house buyer) and urban planner
+Include appropriate emojis
+Keep tone practical for city planning
 """
 
 def _gemini_generate(prompt: str) -> str:
