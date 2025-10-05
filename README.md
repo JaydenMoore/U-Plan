@@ -1,4 +1,4 @@
-# 🌍 Urban Planner AI — NASA-Powered Risk Insights
+# 🌍 U-Plan — NASA-Powered Risk Insights
 
 A lightweight web app that helps **urban planners** assess environmental risks and construction conditions in any location using **NASA's open APIs**.
 
@@ -8,7 +8,7 @@ Built for **NASA Space Apps Challenge 2025**.
 
 ## 🚀 Overview
 
-Urban Planner AI lets you **click on any location on a map** and instantly see:
+U-Plan lets you **click on any location on a map** and instantly see:
 - 🌧️ Average rainfall and potential **flood risk**
 - 🌡️ Average temperature and **heat exposure**
 - 🔥 Optional: Nearby fire data (via NASA FIRMS)
@@ -205,7 +205,7 @@ vercel
 
 ## 🤖 Copilot Prompt
 
-> "Create a React + FastAPI prototype called *Urban Planner AI*. The user clicks on a Mapbox map to get latitude and longitude. The backend calls NASA POWER API to fetch rainfall and temperature data, calculates flood and heat risks, and returns them as JSON. The frontend displays the data in a styled card using Tailwind CSS."
+> "Create a React + FastAPI prototype called *U-Plan*. The user clicks on a Mapbox map to get latitude and longitude. The backend calls NASA POWER API to fetch rainfall and temperature data, calculates flood and heat risks, and returns them as JSON. The frontend displays the data in a styled card using Tailwind CSS."
 
 ---
 
