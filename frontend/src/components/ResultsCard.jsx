@@ -33,6 +33,44 @@ const ResultsCard = ({ assessment }) => {
     }
   }
 
+  const formatSummary = (summaryText) => {
+    if (!summaryText) return null;
+
+    // Split by newline, then process each line
+    return summaryText.split('\n').map((line, index) => {
+      // Trim the line to handle spaces
+      const trimmedLine = line.trim();
+
+      // Handle list items starting with '*'
+      if (trimmedLine.startsWith('* ')) {
+        const content = trimmedLine.substring(2);
+        // Process for bold text
+        const parts = content.split(/(\*\*.*?\*\*)/g);
+        return (
+          <li key={index} className="ml-4 list-disc">
+            {parts.map((part, i) => 
+              part.startsWith('**') && part.endsWith('**') ? 
+              <strong key={i}>{part.slice(2, -2)}</strong> : 
+              part
+            )}
+          </li>
+        );
+      }
+
+      // Handle bold text in regular lines
+      const parts = trimmedLine.split(/(\*\*.*?\*\*)/g);
+      return (
+        <p key={index}>
+          {parts.map((part, i) => 
+            part.startsWith('**') && part.endsWith('**') ? 
+            <strong key={i}>{part.slice(2, -2)}</strong> : 
+            part
+          )}
+        </p>
+      );
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!feedback.trim()) return
@@ -372,7 +410,7 @@ const ResultsCard = ({ assessment }) => {
       <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
         <h3 className="font-semibold text-purple-800 mb-2">🧠 Planning Summary</h3>
         <p className="text-sm text-purple-700 leading-relaxed">
-          {assessment.summary}
+          {formatSummary(assessment.summary)}
         </p>
       </div>
 
