@@ -30,8 +30,8 @@ const MapPage = () => {
     setShowResults(true)
     
     try {
-      console.log('MapPage: Making API request to assess-risk endpoint')
-      const response = await fetch('http://localhost:8001/assess-risk', {
+      console.log('MapPage: Making API request to assess-location-enhanced endpoint')
+      const response = await fetch('http://localhost:8001/assess-location-enhanced', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

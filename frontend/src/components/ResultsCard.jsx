@@ -116,8 +116,97 @@ const ResultsCard = ({ assessment }) => {
                 <span className="text-lg">🏆</span>
                 <span className="font-medium">Overall Risk Score</span>
               </div>
-              <span className="font-bold">{assessment.overall_risk_score}/10</span>
+              <span className="font-bold">{assessment.overall_risk_score.toFixed(2)}/10</span>
             </div>
+          </div>
+        )}
+
+        {/* Probabilistic Risk Assessment */}
+        {assessment.probabilistic_risk && (
+          <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-300 rounded-lg p-4">
+            <h4 className="font-semibold text-purple-800 mb-3 flex items-center">
+              🎯 Advanced Risk Analysis
+            </h4>
+            
+            {assessment.probabilistic_risk.model_fitted ? (
+              <div className="space-y-3">
+                {/* Expected Risk */}
+                <div className="bg-white rounded-lg p-3 shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700">📊 Expected Risk Level</span>
+                    <span className="text-lg font-bold text-purple-600">
+                      {assessment.probabilistic_risk.expected_risk.toFixed(1)}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    Probabilistic assessment incorporating hazard dependencies
+                  </div>
+                </div>
+
+                {/* Confidence Interval */}
+                {assessment.risk_confidence_interval && (
+                  <div className="bg-white rounded-lg p-3 shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">📈 Confidence Range</span>
+                      <span className="text-sm font-bold text-indigo-600">
+                        {assessment.risk_confidence_interval.lower_bound.toFixed(1)} - {assessment.risk_confidence_interval.upper_bound.toFixed(1)}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-600 mb-1">
+                      90% confidence interval • Median: {assessment.risk_confidence_interval.median.toFixed(1)}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      Range shows uncertainty in risk estimates
+                    </div>
+                  </div>
+                )}
+
+                {/* Vulnerability Score */}
+                {assessment.vulnerability_score && (
+                  <div className="bg-white rounded-lg p-3 shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">⚠️ Vulnerability Score</span>
+                      <span className={`text-lg font-bold px-2 py-1 rounded ${
+                        assessment.vulnerability_score > 0.7 ? 'text-red-700 bg-red-100' :
+                        assessment.vulnerability_score > 0.5 ? 'text-orange-700 bg-orange-100' :
+                        assessment.vulnerability_score > 0.3 ? 'text-yellow-700 bg-yellow-100' :
+                        'text-green-700 bg-green-100'
+                      }`}>
+                        {(assessment.vulnerability_score * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      {assessment.vulnerability_score > 0.7 ? 'Very High' :
+                       assessment.vulnerability_score > 0.5 ? 'High' :
+                       assessment.vulnerability_score > 0.3 ? 'Moderate' :
+                       assessment.vulnerability_score > 0.1 ? 'Low' : 'Very Low'} 
+                      susceptibility to combined environmental hazards
+                    </div>
+                  </div>
+                )}
+
+                {/* Model Uncertainty */}
+                <div className="bg-gray-50 rounded-lg p-2">
+                  <div className="text-xs font-medium text-gray-700 mb-1">
+                    Model Confidence: <span className={`font-bold ${
+                      assessment.model_uncertainty === 'Low' ? 'text-green-600' :
+                      assessment.model_uncertainty === 'High' ? 'text-orange-600' :
+                      'text-gray-600'
+                    }`}>{assessment.model_uncertainty}</span>
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    Based on {assessment.probabilistic_risk.n_samples || 500} Monte Carlo samples
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg p-3 shadow-sm">
+                <div className="text-sm text-gray-600">
+                  ℹ️ Enhanced probabilistic analysis not available due to insufficient historical data.
+                  Using simplified risk assessment.
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -345,6 +434,7 @@ const ResultsCard = ({ assessment }) => {
         <p>Population: GPW-v4 (NASA/CIESIN 2020)</p>
         <p>Flood Risk: NASA MODIS (Near real-time)</p>
         <p>Historic Floods: Global Flood Database (GFD, 2000-2018)</p>
+        <p>Risk Modeling: Gaussian Copula with Monte Carlo simulation</p>
       </div>
     </div>
   )
