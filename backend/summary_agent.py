@@ -18,7 +18,7 @@ else:
 
 def _build_summary_prompt(rainfall: float = None, temperature: float = None, flood_risk: str = None, heat_risk: str = None, 
                           air_quality_risk: str = None, aqi: int = None, pm2_5: float = None, overall_risk: float = None,
-                          population_density: float = None, population_stats: dict = None, latitud: float = None, longitude: float = None) -> str:
+                          population_density: float = None, population_stats: dict = None, latitude: float = None, longitude: float = None) -> str:
     
     pm2_5_display = f"{pm2_5:.1f}" if pm2_5 is not None else "N/A"
     rainfall_display = f"{rainfall:.1f}" if rainfall is not None else "N/A"
@@ -30,17 +30,17 @@ def _build_summary_prompt(rainfall: float = None, temperature: float = None, flo
     overall_risk_display = f"{overall_risk:.1f}" if overall_risk is not None else "N/A"
     population_density_display = f"{population_density:.1f}" if population_density is not None else "N/A"
     population_stats_display = population_stats if population_stats is not None else "N/A"
-    latitud = latitud if latitud is not None else "N/A"
-    longitude = longitude if longitude is not None else "N/A"
+    latitude_display = f"{latitude:.4f}" if latitude is not None else "N/A"
+    longitude_display = f"{longitude:.4f}" if longitude is not None else "N/A"
 
 
     return f"""
 You are an urban planning assistant. Create a concise, actionable planning summary (max 120 words).
 Use clear, neutral language with a few relevant emojis similar to existing UI.
-Give their state and country name based on the latitud and longitude provided
+Give their state and country name based on the latitude and longitude provided
 
 Inputs:
-- Location: {latitud, longitude} 
+- Location: ({latitude_display}, {longitude_display}) 
 - Rainfall (mm/month avg): {rainfall_display}
 - Temperature (°C avg): {temperature_display}
 - Flood Risk: {flood_risk_display}
@@ -71,22 +71,22 @@ def _gemini_generate(prompt: str) -> str:
 async def generate_summary(rainfall: float = None, temperature: float = None, flood_risk: str = None, heat_risk: str = None, 
                            air_quality_risk: str = None, aqi: int = None, pm2_5: float = None, overall_risk: float = None,
                            population_density: float = None, population_stats: dict = None
-                           , latitud: float = None, longitude: float = None) -> str:
+                           , latitude: float = None, longitude: float = None) -> str:
     if GOOGLE_API_KEY:
         try:
             logger.info("Generating summary with Google LLM (Gemini).")
-            prompt = _build_summary_prompt(rainfall, temperature, flood_risk, heat_risk, air_quality_risk, aqi, pm2_5, overall_risk, population_density, population_stats)
+            prompt = _build_summary_prompt(rainfall, temperature, flood_risk, heat_risk, air_quality_risk, aqi, pm2_5, overall_risk, population_density, population_stats, latitude, longitude)
             logger.info(f"Prompt: {prompt}")
             text = await asyncio.to_thread(_gemini_generate, prompt)
             return text
         except Exception as e:
             logging.getLogger(__name__).warning(f"LLM summary failed, using rule-based. Error: {e}")
     logger.info("Generating summary with rule-based logic.")
-    return generate_summary_rule_based(rainfall, temperature, flood_risk, heat_risk, air_quality_risk, aqi, pm2_5, overall_risk, population_density, population_stats, latitud, longitude)
+    return generate_summary_rule_based(rainfall, temperature, flood_risk, heat_risk, air_quality_risk, aqi, pm2_5, overall_risk, population_density, population_stats, latitude, longitude)
 
 def generate_summary_rule_based(rainfall: float = None, temperature: float = None, flood_risk: str = None, heat_risk: str = None, 
                     air_quality_risk: str = None, aqi: int = None, pm2_5: float = None, overall_risk: float = None,
-                    population_density: float = None, population_stats: dict = None) -> str:
+                    population_density: float = None, population_stats: dict = None, latitude: float = None, longitude: float = None) -> str:
     """Generate a comprehensive summary for urban planning including population context"""
     
     summary_parts = []
