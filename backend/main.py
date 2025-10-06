@@ -137,7 +137,7 @@ class ProbabilisticRiskModel:
                     epsilon = 1e-6
                     water_transformed = np.clip(water_transformed, epsilon, 1 - epsilon)
                     
-                    a, b, loc, scale = stats.beta.fit(water_transformed)
+                    a, b, loc, scale = stats.beta.fit(water_transformed, floc=0, fscale=1)
                     self.water_fit = {"dist": "beta", "params": (a, b, loc, scale)}
                     
                 except Exception as e:
