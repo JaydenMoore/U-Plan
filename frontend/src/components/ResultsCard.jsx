@@ -261,6 +261,48 @@ const ResultsCard = ({ assessment }) => {
                   </div>
                 )}
 
+                {/* Water Risk Assessment */}
+                {assessment.water_risk && (
+                  <div className="bg-white rounded-lg p-3 shadow-sm border border-blue-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">💧 Water Risk Assessment</span>
+                      <span className={`text-sm font-bold px-2 py-1 rounded ${
+                        assessment.water_risk.overall_category === 'Extremely High' ? 'text-red-700 bg-red-100' :
+                        assessment.water_risk.overall_category === 'High' ? 'text-orange-700 bg-orange-100' :
+                        assessment.water_risk.overall_category === 'Medium-High' ? 'text-yellow-700 bg-yellow-100' :
+                        assessment.water_risk.overall_category === 'Low-Medium' ? 'text-blue-700 bg-blue-100' :
+                        'text-green-700 bg-green-100'
+                      }`}>
+                        {assessment.water_risk.overall_category}
+                      </span>
+                    </div>
+                    
+                    {/* Water Risk Details */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Water Stress:</span>
+                        <span className="font-medium">{assessment.water_risk.baseline_water_stress}/5</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Drought Risk:</span>
+                        <span className="font-medium">{assessment.water_risk.drought_risk}/5</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Flood Risk:</span>
+                        <span className="font-medium">{assessment.water_risk.flood_risk_score}/5</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Overall:</span>
+                        <span className="font-medium">{assessment.water_risk.overall_water_risk}/5</span>
+                      </div>
+                    </div>
+                    
+                    <div className="text-xs text-gray-600 mt-2 pt-2 border-t border-gray-100">
+                      📍 {assessment.water_risk.country} • Source: {assessment.water_risk.source}
+                    </div>
+                  </div>
+                )}
+
                 {/* Model Uncertainty */}
                 <div className="bg-gray-50 rounded-lg p-2">
                   <div className="text-xs font-medium text-gray-700 mb-1">
@@ -287,43 +329,101 @@ const ResultsCard = ({ assessment }) => {
         )}
       </div>
 
-      {/* Air Quality Details */}
+            {/* Air Quality Details */}
       {assessment.air_quality_index && (
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
           <h3 className="font-semibold text-slate-800 mb-3 flex items-center">
             🏭 Air Quality Details
           </h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-white rounded-lg p-2 text-center shadow-sm">
-              <div className="text-2xl font-bold text-purple-600">
-                {assessment.air_quality_index}
+          <div className="grid grid-cols-1 gap-3">
+            {/* US EPA AQI Scale Display */}
+            <div className="w-full h-8 flex rounded-lg overflow-hidden mb-1">
+              <div className="bg-green-500 w-1/6 h-full flex items-center justify-center text-white text-xs font-bold">
+                0-50
               </div>
-              <div className="text-xs text-gray-500 mt-1">scale 0 - 500</div>
-              <div className="text-sm font-medium text-gray-700">📊 AQI</div>
-            </div>
-            <div className="bg-white rounded-lg p-2 text-center shadow-sm">
-              <div className="text-2xl font-bold text-indigo-600">
-                {assessment.pm2_5?.toFixed(1)}
+              <div className="bg-yellow-400 w-1/6 h-full flex items-center justify-center text-gray-800 text-xs font-bold">
+                51-100
               </div>
-              <div className="text-xs text-gray-500 mt-1">μg/m³</div>
-              <div className="text-sm font-medium text-gray-700">💨 PM2.5</div>
+              <div className="bg-orange-400 w-1/6 h-full flex items-center justify-center text-white text-xs font-bold">
+                101-150
+              </div>
+              <div className="bg-red-500 w-1/6 h-full flex items-center justify-center text-white text-xs font-bold">
+                151-200
+              </div>
+              <div className="bg-purple-500 w-1/6 h-full flex items-center justify-center text-white text-xs font-bold">
+                201-300
+              </div>
+              <div className="bg-rose-800 w-1/6 h-full flex items-center justify-center text-white text-xs font-bold">
+                301+
+              </div>
             </div>
-            {assessment.pm10 && (
+            
+            <div className="w-full flex text-xs justify-between px-1 -mt-2 mb-2">
+              <span>Good</span>
+              <span>Moderate</span>
+              <span className="ml-[-15px]">Unhealthy SG</span>
+              <span>Unhealthy</span>
+              <span className="ml-[-12px]">Very Unhealthy</span>
+              <span>Hazardous</span>
+            </div>            <div className="grid grid-cols-2 gap-3">
               <div className="bg-white rounded-lg p-2 text-center shadow-sm">
-                <div className="text-xl font-bold text-blue-600">
-                  {assessment.pm10?.toFixed(1)}
+                <div className={`text-2xl font-bold ${
+                  assessment.air_quality_index >= 301 ? 'text-rose-800' :
+                  assessment.air_quality_index >= 201 ? 'text-purple-600' :
+                  assessment.air_quality_index >= 151 ? 'text-red-600' :
+                  assessment.air_quality_index >= 101 ? 'text-orange-500' :
+                  assessment.air_quality_index >= 51 ? 'text-yellow-600' :
+                  'text-green-600'
+                }`}>
+                  {assessment.air_quality_index}
+                </div>
+                <div className={`text-xs mt-1 font-medium ${
+                  assessment.air_quality_index >= 301 ? 'text-rose-800' :
+                  assessment.air_quality_index >= 201 ? 'text-purple-600' :
+                  assessment.air_quality_index >= 151 ? 'text-red-600' :
+                  assessment.air_quality_index >= 101 ? 'text-orange-500' :
+                  assessment.air_quality_index >= 51 ? 'text-yellow-600' :
+                  'text-green-600'
+                }`}>
+                  {assessment.air_quality_index >= 301 ? 'Hazardous' :
+                   assessment.air_quality_index >= 201 ? 'Very Unhealthy' :
+                   assessment.air_quality_index >= 151 ? 'Unhealthy' :
+                   assessment.air_quality_index >= 101 ? 'Unhealthy for Sensitive Groups' :
+                   assessment.air_quality_index >= 51 ? 'Moderate' :
+                   'Good'}
+                </div>
+                <div className="text-sm font-medium text-gray-700 mt-1">📊 US EPA AQI</div>
+              </div>
+              <div className="bg-white rounded-lg p-2 text-center shadow-sm">
+                <div className="text-2xl font-bold text-indigo-600">
+                  {assessment.pm2_5?.toFixed(1)}
                 </div>
                 <div className="text-xs text-gray-500 mt-1">μg/m³</div>
-                <div className="text-sm font-medium text-gray-700">🌫️ PM10</div>
+                <div className="text-sm font-medium text-gray-700">💨 PM2.5</div>
               </div>
-            )}
-            {assessment.no2 && (
-              <div className="bg-white rounded-lg p-2 text-center shadow-sm">
-                <div className="text-xl font-bold text-green-600">
-                  {assessment.no2?.toFixed(0)}
+              {assessment.pm10 && (
+                <div className="bg-white rounded-lg p-2 text-center shadow-sm">
+                  <div className="text-xl font-bold text-blue-600">
+                    {assessment.pm10?.toFixed(1)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">μg/m³</div>
+                  <div className="text-sm font-medium text-gray-700">🌫️ PM10</div>
                 </div>
-                <div className="text-xs text-gray-500 mt-1">μg/m³</div>
-                <div className="text-sm font-medium text-gray-700">🚗 NO₂</div>
+              )}
+              {assessment.no2 && (
+                <div className="bg-white rounded-lg p-2 text-center shadow-sm">
+                  <div className="text-xl font-bold text-green-600">
+                    {assessment.no2?.toFixed(0)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">μg/m³</div>
+                  <div className="text-sm font-medium text-gray-700">🚗 NO₂</div>
+                </div>
+              )}
+            </div>
+            
+            {assessment.pm2_5_raw && (
+              <div className="text-xs text-gray-500 mt-1 text-center">
+                Raw PM2.5: {assessment.pm2_5_raw?.toFixed(1)} μg/m³ | Calibrated: {assessment.pm2_5?.toFixed(1)} μg/m³
               </div>
             )}
           </div>
@@ -503,6 +603,81 @@ const ResultsCard = ({ assessment }) => {
         </p>
       </div>
 
+      {/* AI Model Explanation */}
+      {assessment.model_explanation && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h3 className="font-semibold text-blue-800 mb-3">🤖 AI Model Explanation</h3>
+          
+          {/* Prediction Details */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="bg-white rounded-lg p-3 shadow-sm">
+              <div className="text-sm font-medium text-gray-700 mb-1">Prediction Value</div>
+              <div className="text-lg font-bold text-blue-600">
+                {assessment.model_explanation.prediction?.toFixed(2)}
+              </div>
+            </div>
+            <div className="bg-white rounded-lg p-3 shadow-sm">
+              <div className="text-sm font-medium text-gray-700 mb-1">Confidence Level</div>
+              <div className={`text-lg font-bold ${
+                assessment.prediction_confidence === 'High' ? 'text-green-600' :
+                assessment.prediction_confidence === 'Medium' ? 'text-yellow-600' : 'text-red-600'
+              }`}>
+                {assessment.prediction_confidence || 'Unknown'}
+              </div>
+            </div>
+          </div>
+
+          {/* Feature Importance */}
+          {assessment.feature_importance && assessment.feature_importance.length > 0 && (
+            <div className="bg-white rounded-lg p-3 shadow-sm mb-3">
+              <div className="text-sm font-medium text-gray-700 mb-3">🎯 Feature Importance</div>
+              <div className="space-y-2">
+                {assessment.feature_importance.map((feature, index) => (
+                  <div key={index} className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className={`w-2 h-2 rounded-full ${
+                        feature.direction === 'increases' ? 'bg-red-400' : 'bg-green-400'
+                      }`}></span>
+                      <span className="text-sm text-gray-700 capitalize">
+                        {feature.feature.replace('_', ' ')}
+                      </span>
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        feature.direction === 'increases' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                      }`}>
+                        {feature.direction} risk
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-16 bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full ${
+                            feature.direction === 'increases' ? 'bg-red-400' : 'bg-green-400'
+                          }`}
+                          style={{ width: `${Math.min(feature.importance * 50, 100)}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-xs text-gray-500 w-12 text-right">
+                        {(feature.importance * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Natural Language Explanation */}
+          {assessment.model_explanation.explanation_text && (
+            <div className="bg-white rounded-lg p-3 shadow-sm">
+              <div className="text-sm font-medium text-gray-700 mb-2">📝 Detailed Explanation</div>
+              <div className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
+                {assessment.model_explanation.explanation_text}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Feedback Form */}
       <div className="bg-white border border-gray-200 rounded-lg p-4">
         <h3 className="font-semibold text-gray-800 mb-2">💬 Spot a Change? Report It.</h3>
@@ -539,7 +714,11 @@ const ResultsCard = ({ assessment }) => {
         <p>Population: GPW-v4 (NASA/CIESIN 2020)</p>
         <p>Flood Risk: NASA MODIS (Near real-time)</p>
         <p>Historic Floods: Global Flood Database (GFD, 2000-2018)</p>
+        <p>Water Risk: WRI Aqueduct 4.0 Global Maps</p>
         <p>Risk Modeling: Gaussian Copula with Monte Carlo simulation</p>
+        {assessment.model_explanation && (
+          <p>AI Interpretability: SHAP (SHapley Additive exPlanations)</p>
+        )}
       </div>
     </div>
   )

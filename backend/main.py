@@ -39,8 +39,33 @@ except ImportError:
     POPULATION_AVAILABLE = False
     print("Population libraries not available. Install rasterio and numpy to enable population features.")
 
+# Import Aqueduct water risk data reader
+try:
+    from aqueduct_reader import AqueductWaterRiskReader
+    AQUEDUCT_AVAILABLE = True
+except ImportError:
+    AQUEDUCT_AVAILABLE = False
+    print("Aqueduct water risk reader not available.")
+
+# Import AI model interpretability
+try:
+    from model_interpretability import RiskModelInterpreter, explain_risk_assessment
+    INTERPRETABILITY_AVAILABLE = True
+except ImportError:
+    INTERPRETABILITY_AVAILABLE = False
+    print("Model interpretability not available. Install SHAP for AI explanations.")
+
+# Import data validation
+try:
+    from data_validation import DataValidator, DataSourceMetadata
+    VALIDATION_AVAILABLE = True
+except ImportError:
+    VALIDATION_AVAILABLE = False
+    print("Data validation module not available.")
+
 # Global variables for caching
 population_reader = None
+aqueduct_reader = None
 historic_flood_dataset = None
 from summary_agent import generate_summary
 
@@ -48,24 +73,27 @@ from summary_agent import generate_summary
 class ProbabilisticRiskModel:
     """
     Probabilistic risk model using Gaussian copula to model dependencies
-    between flood, pollution, and population for comprehensive risk assessment
+    between flood, pollution, population, and water risk for comprehensive risk assessment
     """
     
     def __init__(self):
         self.pol_fit = None
         self.flood_fit = None
+        self.water_fit = None
         self.corr_matrix = None
         self.vuln_params = {
             "alpha_f": 0.12,    # flood effect coefficient
             "alpha_p": 0.02,    # pollution effect coefficient (per µg/m3)
+            "alpha_w": 0.08,    # water risk effect coefficient
             "f0": None,         # flood anchor (will be set to mean)
             "p0": None,         # pollution anchor (will be set to mean)
+            "w0": None,         # water risk anchor (will be set to mean)
             "vmax": 1.0
         }
         self.fitted = False
     
-    def fit_marginal_distributions(self, pollution_data, flood_data):
-        """Fit marginal distributions for pollution and flood data"""
+    def fit_marginal_distributions(self, pollution_data, flood_data, water_risk_data=None):
+        """Fit marginal distributions for pollution, flood data, and water risk"""
         # Remove invalid data
         pol_clean = pollution_data[~np.isnan(pollution_data) & (pollution_data > 0)]
         flood_clean = flood_data[~np.isnan(flood_data) & (flood_data >= 0)]
@@ -94,6 +122,36 @@ class ProbabilisticRiskModel:
             logger.warning(f"Failed to fit pollution distribution: {e}")
             return False
         
+        # Fit water risk if available
+        if water_risk_data is not None:
+            water_clean = water_risk_data[~np.isnan(water_risk_data) & (water_risk_data >= 0)]
+            if len(water_clean) >= 5:  # Less stringent requirement for water risk
+                try:
+                    # Water risk is typically 0-1 scale, use beta distribution
+                    # Transform to (0,1) interval if needed
+                    water_transformed = water_clean
+                    if np.max(water_transformed) > 1:
+                        water_transformed = water_transformed / np.max(water_transformed)
+                    
+                    # Avoid exact 0 and 1 values for beta distribution
+                    epsilon = 1e-6
+                    water_transformed = np.clip(water_transformed, epsilon, 1 - epsilon)
+                    
+                    a, b, loc, scale = stats.beta.fit(water_transformed)
+                    self.water_fit = {"dist": "beta", "params": (a, b, loc, scale)}
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to fit water risk distribution: {e}")
+                    # Use normal distribution as fallback
+                    try:
+                        mu, sigma = stats.norm.fit(water_clean)
+                        self.water_fit = {"dist": "norm", "params": (mu, sigma)}
+                    except:
+                        self.water_fit = None
+            else:
+                logger.warning("Insufficient water risk data for distribution fitting")
+                self.water_fit = None
+        
         # Fit flood probability (0-1) - use beta distribution
         try:
             # Clip to (0,1) range for beta
@@ -108,19 +166,36 @@ class ProbabilisticRiskModel:
         self.vuln_params['p0'] = np.mean(pol_clean)
         self.vuln_params['f0'] = np.mean(flood_clean)
         
+        # Set water risk anchor if available
+        if water_risk_data is not None and self.water_fit is not None:
+            water_clean = water_risk_data[~np.isnan(water_risk_data) & (water_risk_data >= 0)]
+            if len(water_clean) > 0:
+                self.vuln_params['w0'] = np.mean(water_clean)
+            else:
+                self.vuln_params['w0'] = 0.2  # Default anchor
+        else:
+            self.vuln_params['w0'] = 0.2  # Default anchor
+        
         logger.info(f"Fitted marginals - Pollution: {self.pol_fit['dist']}, Flood: {self.flood_fit['dist']}")
+        if self.water_fit:
+            logger.info(f"Water risk: {self.water_fit['dist']}")
         return True
     
-    def estimate_copula_dependence(self, pollution_data, flood_data):
+    def estimate_copula_dependence(self, pollution_data, flood_data, water_risk_data=None):
         """Estimate Gaussian copula dependence structure"""
         # Clean data
         valid_mask = ~np.isnan(pollution_data) & ~np.isnan(flood_data) & (pollution_data > 0) & (flood_data >= 0)
+        
+        if water_risk_data is not None:
+            valid_mask = valid_mask & ~np.isnan(water_risk_data) & (water_risk_data >= 0)
+        
         pol_clean = pollution_data[valid_mask]
         flood_clean = flood_data[valid_mask]
         
         if len(pol_clean) < 20:
             logger.warning("Insufficient data for copula estimation")
-            self.corr_matrix = np.eye(2)  # Independence assumption
+            n_dims = 3 if water_risk_data is not None and self.water_fit is not None else 2
+            self.corr_matrix = np.eye(n_dims)  # Independence assumption
             return False
         
         try:
@@ -137,8 +212,19 @@ class ProbabilisticRiskModel:
             z_pol = stats.norm.ppf(u_pol)
             z_flood = stats.norm.ppf(u_flood)
             
+            # Handle water risk if available
+            if water_risk_data is not None and self.water_fit is not None:
+                water_clean = water_risk_data[valid_mask]
+                u_water = self._cdf_eval(water_clean, self.water_fit)
+                u_water = np.clip(u_water, eps, 1-eps)
+                z_water = stats.norm.ppf(u_water)
+                
+                # Stack all variables
+                Z = np.vstack([z_pol, z_flood, z_water]).T
+            else:
+                Z = np.vstack([z_pol, z_flood]).T
+            
             # Estimate correlation
-            Z = np.vstack([z_pol, z_flood]).T
             self.corr_matrix = np.corrcoef(Z, rowvar=False)
             
             # Ensure positive definite
@@ -184,18 +270,20 @@ class ProbabilisticRiskModel:
         else:
             raise ValueError("Unsupported distribution for inverse CDF")
     
-    def vulnerability_function(self, flood_prob, pollution_pm25):
+    def vulnerability_function(self, flood_prob, pollution_pm25, water_risk=0.0):
         """
-        Logistic vulnerability function combining flood and pollution effects
+        Logistic vulnerability function combining flood, pollution, and water risk effects
         Returns vulnerability score between 0 and vmax
         """
         alpha_f = self.vuln_params['alpha_f']
         alpha_p = self.vuln_params['alpha_p']
+        alpha_w = self.vuln_params['alpha_w']
         f0 = self.vuln_params['f0']
         p0 = self.vuln_params['p0']
+        w0 = self.vuln_params['w0'] if self.vuln_params['w0'] is not None else 0.2
         vmax = self.vuln_params['vmax']
         
-        z = alpha_f * (flood_prob - f0) + alpha_p * (pollution_pm25 - p0)
+        z = alpha_f * (flood_prob - f0) + alpha_p * (pollution_pm25 - p0) + alpha_w * (water_risk - w0)
         return vmax / (1.0 + np.exp(-z))
     
     def sample_joint_hazards(self, n_samples=1000):
@@ -203,10 +291,15 @@ class ProbabilisticRiskModel:
         if not self.fitted:
             raise ValueError("Model must be fitted before sampling")
         
+        # Determine number of dimensions based on available fits
+        n_dims = 2  # pollution and flood always present
+        if self.water_fit is not None:
+            n_dims = 3
+        
         # Sample from multivariate normal
         rng = np.random.default_rng(42)
         L = np.linalg.cholesky(self.corr_matrix)
-        z = rng.standard_normal(size=(n_samples, 2))
+        z = rng.standard_normal(size=(n_samples, n_dims))
         correlated = z @ L.T
         
         # Transform to uniform margins
@@ -216,9 +309,13 @@ class ProbabilisticRiskModel:
         pollution_samples = self._inv_cdf(u[:, 0], self.pol_fit)
         flood_samples = self._inv_cdf(u[:, 1], self.flood_fit)
         
-        return pollution_samples, flood_samples
+        water_samples = None
+        if self.water_fit is not None and n_dims == 3:
+            water_samples = self._inv_cdf(u[:, 2], self.water_fit)
+        
+        return pollution_samples, flood_samples, water_samples
     
-    def compute_probabilistic_risk(self, current_pollution, current_flood, population_density, n_samples=1000):
+    def compute_probabilistic_risk(self, current_pollution, current_flood, population_density, current_water_risk=0.0, n_samples=1000):
         """
         Compute probabilistic risk assessment using Monte Carlo sampling
         
@@ -227,7 +324,7 @@ class ProbabilisticRiskModel:
         """
         if not self.fitted:
             # Simple fallback if model not fitted
-            vuln = self.vulnerability_function(current_flood, current_pollution)
+            vuln = self.vulnerability_function(current_flood, current_pollution, current_water_risk)
             return {
                 "expected_risk": float(population_density * vuln),
                 "risk_p05": float(population_density * vuln * 0.5),
@@ -239,13 +336,19 @@ class ProbabilisticRiskModel:
         
         try:
             # Sample joint hazards
-            pol_samples, flood_samples = self.sample_joint_hazards(n_samples)
+            pol_samples, flood_samples, water_samples = self.sample_joint_hazards(n_samples)
             
             # Compute vulnerability for each sample
-            vuln_samples = np.array([
-                self.vulnerability_function(f, p) 
-                for f, p in zip(flood_samples, pol_samples)
-            ])
+            if water_samples is not None:
+                vuln_samples = np.array([
+                    self.vulnerability_function(f, p, w) 
+                    for f, p, w in zip(flood_samples, pol_samples, water_samples)
+                ])
+            else:
+                vuln_samples = np.array([
+                    self.vulnerability_function(f, p, current_water_risk) 
+                    for f, p in zip(flood_samples, pol_samples)
+                ])
             
             # Risk = population * vulnerability
             risk_samples = population_density * vuln_samples
@@ -282,17 +385,17 @@ class ProbabilisticRiskModel:
                 "error": str(e)
             }
     
-    def fit(self, pollution_data, flood_data):
+    def fit(self, pollution_data, flood_data, water_risk_data=None):
         """Fit the complete probabilistic model"""
         logger.info("Fitting probabilistic risk model...")
         
         # Fit marginal distributions
-        if not self.fit_marginal_distributions(pollution_data, flood_data):
+        if not self.fit_marginal_distributions(pollution_data, flood_data, water_risk_data):
             logger.warning("Failed to fit marginal distributions")
             return False
         
         # Estimate copula dependence
-        if not self.estimate_copula_dependence(pollution_data, flood_data):
+        if not self.estimate_copula_dependence(pollution_data, flood_data, water_risk_data):
             logger.warning("Failed to estimate copula dependence")
             return False
         
@@ -304,7 +407,7 @@ class ProbabilisticRiskModel:
 probabilistic_model = ProbabilisticRiskModel()
 
 # OpenWeatherMap API configuration
-OPENWEATHER_API_KEY = "28e7cf23db337a4fcb983071b8d85b2b"
+OPENWEATHER_API_KEY = os.getenv("OPEN_WEATHER_API")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -331,7 +434,7 @@ else:
 # Initialize population data reader
 population_reader = None
 if POPULATION_AVAILABLE:
-    population_data_path = "/Users/jaydenmoore/Documents/NASA Space Apps/population density/gpw-v4-population-density-adjusted-to-2015-unwpp-country-totals_2020.tif"
+    population_data_path = "../data/gpw/gpw-v4-population-density-adjusted-to-2015-unwpp-country-totals_2020.tif"
     if os.path.exists(population_data_path):
         try:
             population_reader = PopulationDataReader(population_data_path)
@@ -341,9 +444,18 @@ if POPULATION_AVAILABLE:
     else:
         logger.warning(f"Population data file not found at: {population_data_path}")
 
+# Initialize Aqueduct water risk reader
+aqueduct_reader = None
+if AQUEDUCT_AVAILABLE:
+    try:
+        aqueduct_reader = AqueductWaterRiskReader()
+        logger.info("Aqueduct water risk data loaded successfully")
+    except Exception as e:
+        logger.warning(f"Failed to load Aqueduct water risk data: {e}")
+
 # Initialize historic flood data reader (Global Flood Database)
 historic_flood_dataset = None
-historic_flood_path = "/Users/jaydenmoore/Documents/NASA Space Apps/data/global_flood_frequency.tif"
+historic_flood_path = "../data/global_flood_frequency.tif"
 if POPULATION_AVAILABLE:  # Use same rasterio availability check
     if os.path.exists(historic_flood_path):
         try:
@@ -414,6 +526,24 @@ class EnhancedRiskAssessment(RiskAssessment):
     risk_confidence_interval: Optional[Dict] = None
     vulnerability_score: Optional[float] = None
     model_uncertainty: Optional[str] = None
+    # Water risk assessment fields
+    water_risk: Optional[Dict] = None
+    water_stress_level: Optional[str] = None
+    drought_risk_level: Optional[str] = None
+    # AI interpretability fields
+    model_explanation: Optional[Dict] = None
+    feature_importance: Optional[List[Dict]] = None
+    prediction_confidence: Optional[str] = None
+
+class ModelExplanationResponse(BaseModel):
+    """Response model for AI model explanations"""
+    location: Dict[str, float]
+    prediction_value: float
+    base_value: float
+    confidence_level: str
+    explanation_text: str
+    feature_contributions: List[Dict[str, Any]]
+    timestamp: str
 
 class FeedbackRequest(BaseModel):
     latitude: float
@@ -515,16 +645,20 @@ def calculate_air_quality_risk(aqi: int, pm2_5: float, pm10: float) -> str:
     """Calculate air quality risk level based on AQI and particulate matter"""
     
     # US EPA AQI standards: 0-50 Good, 51-100 Moderate, 101-150 Unhealthy for Sensitive, 151-200 Unhealthy, 201-300 Very Unhealthy, 301+ Hazardous
-    if aqi >= 201 or pm2_5 > 150 or pm10 > 350:
-        return "Very High"
-    elif aqi >= 151 or pm2_5 > 55 or pm10 > 250:
-        return "High"
-    elif aqi >= 101 or pm2_5 > 35 or pm10 > 150:
-        return "Medium"
-    elif aqi >= 51 or pm2_5 > 12 or pm10 > 50:
-        return "Low"
+    if aqi is None:
+        return None
+    elif aqi >= 301:
+        return "Hazardous"
+    elif aqi >= 201:
+        return "Very Unhealthy"
+    elif aqi >= 151:
+        return "Unhealthy"
+    elif aqi >= 101:
+        return "Unhealthy for Sensitive Groups"
+    elif aqi >= 51:
+        return "Moderate"
     else:
-        return "Very Low"
+        return "Good"
 
 def calculate_comprehensive_flood_risk(realtime_flood_score: float, historic_flood_frequency: float, lat: float, lon: float) -> Dict[str, Any]:
     """
@@ -596,42 +730,50 @@ def calculate_comprehensive_flood_risk(realtime_flood_score: float, historic_flo
         }
     }
 
-def calculate_overall_risk_score(flood_risk: str, heat_risk: str, air_quality_risk: str, population_density: Optional[float] = None) -> float:
-    """Calculate overall risk score (0-10) based on individual risk factors and population context"""
+def calculate_overall_risk_score(flood_risk: str, heat_risk: str, air_quality_risk: str, population_density: Optional[float] = None, water_risk_score: Optional[float] = None) -> float:
+    """Calculate overall risk score (0-10) based on individual risk factors, water risk, and population context"""
     
-    # Risk level to numeric mapping
+    # Risk level to numeric mapping with more spread
     risk_values = {
-        "Very Low": 1,
-        "Low": 2.5,
-        "Medium": 5,
-        "High": 8,
-        "Very High": 10
+        "Very Low": 0.5,
+        "Low": 2.0,
+        "Medium": 4.5,
+        "High": 7.5,
+        "Very High": 9.5
     }
     
     # Get numeric values for each risk
-    flood_val = risk_values.get(flood_risk, 5)
-    heat_val = risk_values.get(heat_risk, 5)
-    air_val = risk_values.get(air_quality_risk, 5)
+    flood_val = risk_values.get(flood_risk, 4.5)
+    heat_val = risk_values.get(heat_risk, 4.5)
+    air_val = risk_values.get(air_quality_risk, 4.5)
     
-    # Base weighted average: flood 30%, heat 30%, air quality 25%
-    base_score = (flood_val * 0.30) + (heat_val * 0.30) + (air_val * 0.25)
+    # Include water risk (convert from 0-5 to 0-10 scale)
+    water_val = 0
+    if water_risk_score is not None:
+        water_val = (water_risk_score / 5.0) * 10.0  # Convert 0-5 to 0-10
     
-    # Population density modifier (15% weight)
+    # Enhanced weighted average with water risk included
+    # flood 25%, heat 20%, air quality 20%, water risk 25%, population 10%
+    base_score = (flood_val * 0.25) + (heat_val * 0.20) + (air_val * 0.20) + (water_val * 0.25)
+    
+    # Enhanced population density modifier (10% weight)
     pop_modifier = 0
     if population_density is not None:
-        if population_density > 1000:  # Very high density
-            pop_modifier = 2.0  # Increases risk due to exposure
-        elif population_density > 500:  # High density
+        if population_density > 5000:  # Extremely high density (like Singapore, NYC)
+            pop_modifier = 3.0  
+        elif population_density > 2000:  # Very high density
+            pop_modifier = 2.0  
+        elif population_density > 1000:  # High density  
             pop_modifier = 1.5
-        elif population_density > 150:  # Medium density
+        elif population_density > 500:  # Medium density
             pop_modifier = 1.0
-        elif population_density > 50:  # Low density
+        elif population_density > 100:  # Low density
             pop_modifier = 0.5
-        else:  # Very low/uninhabited
+        else:  # Very low/rural
             pop_modifier = 0.0
     
     # Apply population modifier
-    overall_score = base_score + (pop_modifier * 0.15)
+    overall_score = base_score + (pop_modifier * 0.10)
     
     # Ensure score stays within bounds
     overall_score = max(0, min(10, overall_score))
@@ -640,6 +782,9 @@ def calculate_overall_risk_score(flood_risk: str, heat_risk: str, air_quality_ri
 
 async def assess_location_enhanced(location: LocationRequest):
     """Enhanced assessment with probabilistic risk modeling"""
+    # Declare global variables at the beginning of the function
+    global probabilistic_model
+    
     try:
         # Validate coordinates
         if not (-90 <= location.latitude <= 90):
@@ -667,9 +812,23 @@ async def assess_location_enhanced(location: LocationRequest):
         flood_data = fetch_nasa_modis_flood_data(location.latitude, location.longitude)
         historic_flood_data = fetch_historic_flood_frequency(location.latitude, location.longitude)
         
+        # Get water risk data from Aqueduct
+        water_risk_data = None
+        if aqueduct_reader:
+            try:
+                water_risk_data = aqueduct_reader.get_water_risk_by_country(
+                    location.latitude, 
+                    location.longitude
+                )
+                logger.info(f"Water risk data retrieved: {water_risk_data.get('overall_category', 'Unknown')}")
+            except Exception as e:
+                logger.warning(f"Failed to get water risk data: {e}")
+                water_risk_data = None
+        
         # Prepare data for probabilistic model
         current_pollution = air_data["pm2_5"]
         current_flood_prob = flood_data["flood_risk"]
+        current_water_risk = water_risk_data.get("overall_risk_normalized", 0.0) if water_risk_data else 0.0
         
         # Try to fit probabilistic model if we have sufficient historical data
         # (In practice, you'd fit this once with historical data and reuse)
@@ -679,11 +838,20 @@ async def assess_location_enhanced(location: LocationRequest):
             hist_pollution = np.random.lognormal(mean=np.log(max(current_pollution, 1) + 1), sigma=0.5, size=100)
             hist_flood = np.random.beta(a=2, b=8, size=100) * 0.3  # Simulate flood probabilities
             
-            if probabilistic_model.fit(hist_pollution, hist_flood):
+            # Simulate water risk historical data if available
+            hist_water_risk = None
+            if water_risk_data:
+                # Generate historical water risk data centered around current value
+                base_risk = current_water_risk
+                hist_water_risk = np.random.beta(a=2, b=5, size=100) * (base_risk + 0.1)
+                hist_water_risk = np.clip(hist_water_risk, 0, 1)  # Keep in 0-1 range
+            
+            if probabilistic_model.fit(hist_pollution, hist_flood, hist_water_risk):
                 prob_risk = probabilistic_model.compute_probabilistic_risk(
                     current_pollution, 
                     current_flood_prob, 
                     population_density or 100.0,
+                    current_water_risk,
                     n_samples=500
                 )
             else:
@@ -708,13 +876,25 @@ async def assess_location_enhanced(location: LocationRequest):
             else:
                 prob_risk_component = 0.0
             
-            base_risk = calculate_overall_risk_score(risks["flood_risk"], risks["heat_risk"], air_quality_risk, population_density)
+            base_risk = calculate_overall_risk_score(
+                risks["flood_risk"], 
+                risks["heat_risk"], 
+                air_quality_risk, 
+                population_density,
+                water_risk_data.get("overall_water_risk") if water_risk_data else None
+            )
             # Weighted combination: base risk gets 60%, probabilistic gets 40% 
             overall_risk = (base_risk * 0.6) + (prob_risk_component * 0.4)
             
             model_uncertainty = "Low" if prob_risk["uncertainty_range"] < prob_risk["expected_risk"] * 0.5 else "High"
         else:
-            overall_risk = calculate_overall_risk_score(risks["flood_risk"], risks["heat_risk"], air_quality_risk, population_density)
+            overall_risk = calculate_overall_risk_score(
+                risks["flood_risk"], 
+                risks["heat_risk"], 
+                air_quality_risk, 
+                population_density,
+                water_risk_data.get("overall_water_risk") if water_risk_data else None
+            )
             model_uncertainty = "Model not fitted"
         
         # Calculate comprehensive flood risk assessment
@@ -739,6 +919,47 @@ async def assess_location_enhanced(location: LocationRequest):
                 "upper_bound": prob_risk["risk_p95"],
                 "confidence_level": "90%"
             }
+        
+        # Generate AI model explanation if interpretability is available
+        model_explanation = None
+        feature_importance = None
+        prediction_confidence = None
+        
+        if INTERPRETABILITY_AVAILABLE and population_density is not None:
+            try:
+                # Create probabilistic model instance for interpretation if needed
+                if probabilistic_model is None:
+                    probabilistic_model = ProbabilisticRiskModel()
+                
+                explanation = explain_risk_assessment(
+                    pollution=air_data["pm2_5"],
+                    flood_risk=flood_data["flood_risk"], 
+                    water_stress=current_water_risk,
+                    population_density=population_density,
+                    probabilistic_model=probabilistic_model
+                )
+                
+                model_explanation = {
+                    "prediction": explanation.prediction_value,
+                    "base_value": explanation.base_value,
+                    "explanation_text": explanation.explanation_text,
+                    "timestamp": explanation.timestamp.isoformat()
+                }
+                
+                feature_importance = [
+                    {
+                        "feature": contrib.feature_name,
+                        "importance": contrib.importance_score,
+                        "direction": contrib.impact_direction,
+                        "confidence": contrib.confidence
+                    }
+                    for contrib in explanation.feature_contributions
+                ]
+                
+                prediction_confidence = explanation.confidence_level
+                
+            except Exception as e:
+                logger.warning(f"Failed to generate model explanation: {e}")
         
         return EnhancedRiskAssessment(
             latitude=location.latitude,
@@ -768,7 +989,15 @@ async def assess_location_enhanced(location: LocationRequest):
             probabilistic_risk=prob_risk,
             risk_confidence_interval=confidence_interval,
             vulnerability_score=prob_risk.get("vulnerability_mean") if prob_risk else None,
-            model_uncertainty=model_uncertainty
+            model_uncertainty=model_uncertainty,
+            # Water risk fields
+            water_risk=water_risk_data,
+            water_stress_level=water_risk_data.get("water_stress_category") if water_risk_data else None,
+            drought_risk_level=water_risk_data.get("drought_category") if water_risk_data else None,
+            # AI interpretability fields
+            model_explanation=model_explanation,
+            feature_importance=feature_importance,
+            prediction_confidence=prediction_confidence
         )
         
     except Exception as e:
@@ -1061,7 +1290,17 @@ async def fetch_air_pollution_data_async(lat: float, lng: float) -> Dict[str, fl
             except (httpx.TimeoutException, httpx.HTTPStatusError) as e:
                 if attempt == max_retries:
                     logger.warning(f"Air pollution API failed after {max_retries + 1} attempts for {lat}, {lng}: {e}")
-                    return get_fallback_air_quality_data(lat, lng)
+                    # Instead of using fallback data, return missing data indicators
+                    return {
+                        "aqi": None,
+                        "openweather_aqi": None,
+                        "pm2_5": None,
+                        "pm10": None,
+                        "no2": None,
+                        "o3": None,
+                        "co": None,
+                        "data_available": False
+                    }
                 else:
                     await asyncio.sleep(1.0 * (attempt + 1))
                     logger.info(f"Retrying air pollution API for {lat}, {lng} (attempt {attempt + 2})")
@@ -1074,35 +1313,62 @@ async def fetch_air_pollution_data_async(lat: float, lng: float) -> Dict[str, fl
         openweather_aqi = air_data["main"]["aqi"]  # OpenWeatherMap AQI (1-5)
         components = air_data["components"]
         
-        # Extract key pollutants
-        pm2_5 = components.get("pm2_5", 0)
+        # Extract key pollutants - use the raw values directly from the API
+        # According to OpenWeatherMap documentation, values are already in μg/m³
+        pm2_5_raw = components.get("pm2_5", 0)
         pm10 = components.get("pm10", 0)
         no2 = components.get("no2", 0)
         o3 = components.get("o3", 0)
         co = components.get("co", 0)
         
-        # Calculate proper AQI based on PM2.5 (US EPA standard)
+        # Apply calibration to PM2.5 using polynomial model derived from calibration analysis
+        # This addresses the consistently lower PM2.5 values reported by OpenWeatherMap
+        if pm2_5_raw > 0:
+            pm2_5 = 0.024065 * (pm2_5_raw**2) + 1.5664 * pm2_5_raw + 7.4087
+        else:
+            pm2_5 = 0
+        
+        # Log the raw and calibrated values for reference
+        logger.info(f"Raw air quality values from OpenWeatherMap for {lat}, {lng}:")
+        logger.info(f"Raw PM2.5: {pm2_5_raw:.2f}, Calibrated PM2.5: {pm2_5:.2f}, PM10: {pm10:.2f}, NO2: {no2:.2f}, O3: {o3:.2f}, CO: {co:.2f} μg/m³")
+        
+        # Calculate proper AQI based on calibrated PM2.5 (US EPA standard)
         calculated_aqi = calculate_aqi_from_pm25(pm2_5)
         
         result = {
             "aqi": calculated_aqi,
             "openweather_aqi": openweather_aqi,
             "pm2_5": pm2_5,
+            "pm2_5_raw": pm2_5_raw,  # Include the raw value for reference
             "pm10": pm10,
             "no2": no2,
             "o3": o3,
             "co": co
         }
         
+        # Add data availability flag
+        result["data_available"] = True
+        
         # Cache the result
         fetch_air_pollution_data_async.cache[cache_key] = result
-        logger.info(f"Fetched and cached air pollution data for {lat_rounded}, {lng_rounded}: AQI={calculated_aqi} (PM2.5: {pm2_5}μg/m³)")
+        logger.info(f"Fetched and cached air pollution data for {lat_rounded}, {lng_rounded}: AQI={calculated_aqi} (PM2.5: {pm2_5}μg/m³, PM10: {pm10}μg/m³, NO2: {no2}μg/m³)")
         
         return result
         
     except Exception as e:
         logger.error(f"Air pollution API error for coordinates {lat}, {lng}: {e}")
-        return get_fallback_air_quality_data(lat, lng)
+        # Return missing data indicators instead of fallback data
+        return {
+            "aqi": None,
+            "openweather_aqi": None,
+            "pm2_5": None,
+            "pm2_5_raw": None,
+            "pm10": None,
+            "no2": None,
+            "o3": None,
+            "co": None,
+            "data_available": False
+        }
 
 # Initialize cache for air pollution function
 fetch_air_pollution_data_async.cache = {}
@@ -1286,38 +1552,7 @@ def calculate_aqi_from_pm25(pm25: float) -> int:
     
     return 500  # Default to maximum if no breakpoint found
 
-def get_fallback_air_quality_data(lat: float, lng: float) -> Dict[str, float]:
-    """Provide fallback air quality data when API fails"""
-    # Estimate air quality based on geographic location
-    if abs(lat) > 60:  # Arctic/Antarctic - clean air
-        openweather_aqi = 1
-        pm2_5, pm10 = 5, 10
-    elif abs(lat) > 40:  # Temperate - moderate
-        openweather_aqi = 2
-        pm2_5, pm10 = 15, 25
-    else:  # Tropical/subtropical - variable
-        openweather_aqi = 3
-        pm2_5, pm10 = 25, 40
-    
-    # Adjust for longitude (rough urban/industrial effects)
-    if -100 < lng < -70 or 100 < lng < 140:  # Major industrial regions
-        openweather_aqi = min(5, openweather_aqi + 1)
-        pm2_5 *= 1.5
-        pm10 *= 1.3
-    
-    # Calculate proper AQI from PM2.5
-    calculated_aqi = calculate_aqi_from_pm25(pm2_5)
-    
-    logger.info(f"Using fallback air quality data for {lat}, {lng}: AQI={calculated_aqi} (PM2.5: {pm2_5})")
-    return {
-        "aqi": calculated_aqi,
-        "openweather_aqi": openweather_aqi,
-        "pm2_5": pm2_5,
-        "pm10": pm10,
-        "no2": 20.0,
-        "o3": 80.0,
-        "co": 200.0
-    }
+
 
 async def assess_single_location_async(lat: float, lng: float) -> RiskAssessment:
     """Async version of assess_single_location using httpx with air quality integration"""
@@ -1810,6 +2045,97 @@ async def get_rising_issues(
     except Exception as e:
         logger.error(f"Error in /rising-issues endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An internal error occurred while analyzing rising issues.")
+
+@app.post("/explain-prediction", response_model=ModelExplanationResponse)
+async def explain_prediction(location: LocationRequest):
+    """
+    Generate AI model explanation for risk prediction at a given location
+    """
+    global probabilistic_model
+    if not INTERPRETABILITY_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Model interpretability service not available. Install SHAP for AI explanations.")
+    
+    try:
+        # Get the data needed for explanation
+        nasa_data_task = fetch_nasa_power_data_async(location.latitude, location.longitude)
+        air_data_task = fetch_air_pollution_data_async(location.latitude, location.longitude)
+        
+        climate_data, air_data = await asyncio.gather(nasa_data_task, air_data_task)
+        
+        # Get population and water risk data
+        population_density = 100.0  # Default
+        if POPULATION_AVAILABLE and population_reader:
+            try:
+                population_density = population_reader.get_population_density(location.latitude, location.longitude)
+            except Exception as e:
+                logger.warning(f"Failed to get population data: {e}")
+        
+        flood_data = fetch_nasa_modis_flood_data(location.latitude, location.longitude)
+        
+        current_water_risk = 0.0
+        if aqueduct_reader:
+            try:
+                water_risk_data = aqueduct_reader.get_water_risk_by_country(
+                    location.latitude, 
+                    location.longitude
+                )
+                current_water_risk = water_risk_data.get("overall_risk_normalized", 0.0) if water_risk_data else 0.0
+            except Exception as e:
+                logger.warning(f"Failed to get water risk data: {e}")
+        
+        # Initialize probabilistic model if needed
+        if probabilistic_model is None:
+            probabilistic_model = ProbabilisticRiskModel()
+        
+        # Generate explanation
+        explanation = explain_risk_assessment(
+            pollution=air_data["pm2_5"],
+            flood_risk=flood_data["flood_risk"], 
+            water_stress=current_water_risk,
+            population_density=population_density,
+            probabilistic_model=probabilistic_model
+        )
+        
+        # Format feature contributions
+        feature_contributions = [
+            {
+                "feature_name": contrib.feature_name,
+                "importance_score": contrib.importance_score,
+                "impact_direction": contrib.impact_direction,
+                "confidence": contrib.confidence
+            }
+            for contrib in explanation.feature_contributions
+        ]
+        
+        return ModelExplanationResponse(
+            location={"latitude": location.latitude, "longitude": location.longitude},
+            prediction_value=explanation.prediction_value,
+            base_value=explanation.base_value,
+            confidence_level=explanation.confidence_level,
+            explanation_text=explanation.explanation_text,
+            feature_contributions=feature_contributions,
+            timestamp=explanation.timestamp.isoformat()
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to generate explanation: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate model explanation: {str(e)}")
+
+@app.get("/model-interpretability-status")
+async def get_interpretability_status():
+    """Get the status of AI model interpretability features"""
+    return {
+        "interpretability_available": INTERPRETABILITY_AVAILABLE,
+        "shap_available": INTERPRETABILITY_AVAILABLE,
+        "features_explained": [
+            "pollution_pm25", 
+            "flood_probability", 
+            "water_stress_level",
+            "population_density"
+        ] if INTERPRETABILITY_AVAILABLE else [],
+        "explanation_methods": ["SHAP", "Feature Importance", "Natural Language"] if INTERPRETABILITY_AVAILABLE else [],
+        "status": "active" if INTERPRETABILITY_AVAILABLE else "requires_shap_installation"
+    }
 
 if __name__ == "__main__":
     import uvicorn

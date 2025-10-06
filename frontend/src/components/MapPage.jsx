@@ -14,6 +14,10 @@ const MapPage = () => {
   const handleLocationClick = async (lat, lng) => {
     console.log('MapPage: handleLocationClick called with:', lat, lng)
     
+    // Normalize longitude to be within -180 to 180 degrees
+    const normalizedLng = ((lng + 540) % 360) - 180
+    console.log('MapPage: Normalized longitude:', normalizedLng)
+    
     // Cancel any previous request
     if (abortControllerRef.current) {
       console.log('MapPage: Cancelling previous request')
@@ -36,7 +40,7 @@ const MapPage = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ latitude: lat, longitude: lng }),
+        body: JSON.stringify({ latitude: lat, longitude: normalizedLng }),
         signal: abortControllerRef.current.signal
       })
       

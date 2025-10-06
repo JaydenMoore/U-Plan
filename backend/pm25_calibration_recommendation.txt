@@ -1,0 +1,19 @@
+PM2.5 CALIBRATION ANALYSIS
+Date: 2025-10-05 19:05:36
+
+Data points analyzed: 20
+Data points after outlier removal: 18
+
+MODEL COMPARISON:
+  Simple Multiplier: MAE = 12.0810
+  Linear Regression: MAE = 10.9664
+  Polynomial Regression: MAE = 10.7851
+
+
+RECOMMENDATION:
+Apply a polynomial transformation to PM2.5 values from OpenWeatherMap.
+Implementation in code would be:
+```python
+# Apply calibration using polynomial model
+pm2_5 = 0.024065 * (pm2_5**2) + 1.5664 * pm2_5 + 7.4087
+```
