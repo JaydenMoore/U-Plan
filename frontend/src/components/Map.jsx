@@ -286,7 +286,7 @@ const Map = forwardRef(({ onLocationClick, assessment, onToggleResults }, ref) =
       })
 
       // Create fetch promise
-      const fetchPromise = fetch('http://localhost:8001/assess-risk-bulk', {
+      const fetchPromise = fetch('https://uplan-backend-156683368413.asia-southeast1.run.app/assess-risk-bulk', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -413,7 +413,7 @@ const Map = forwardRef(({ onLocationClick, assessment, onToggleResults }, ref) =
         if (error.message === 'Request timeout') {
           alert('Request timeout: The NASA API is taking too long to respond. Please try with a smaller area or wait a moment and try again.')
         } else if (error.message.includes('Failed to fetch')) {
-          alert('Network error: Could not connect to the backend server. Please ensure the backend is running on port 8001.')
+          alert('Network error: Could not connect to the backend server. Please ensure the backend is running on port uplan-backend GCloud.')
         } else {
           alert('Error generating regional risk assessment: ' + errorMessage)
         }

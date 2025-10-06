@@ -46,7 +46,7 @@ const DashboardPage = () => {
   const [apiLogs, setApiLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://uplan-backend-156683368413.asia-southeast1.run.app'
 
   const fetchDashboardData = async () => {
     try {

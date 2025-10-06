@@ -42,7 +42,7 @@ const MapPage = () => {
     
     try {
       console.log('MapPage: Making API request to assess-location-enhanced endpoint')
-      const response = await fetch('http://localhost:8001/assess-location-enhanced', {
+      const response = await fetch('https://uplan-backend-156683368413.asia-southeast1.run.app/assess-location-enhanced', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -80,7 +80,7 @@ const MapPage = () => {
       let errorMessage = 'Failed to fetch environmental data. '
       
       if (err.message.includes('Failed to fetch')) {
-        errorMessage += 'Please make sure the backend server is running on port 8001.'
+        errorMessage += 'Please make sure the backend server is running on port uplan-backend GCloud.'
       } else {
         errorMessage += err.message
       }
