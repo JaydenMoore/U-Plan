@@ -1096,13 +1096,14 @@ async def assess_location_enhanced(location: LocationRequest):
         # Fallback to original assessment
         return await assess_location(location)
 
-async def generate_enhanced_summary(climate_data, risks, air_quality_risk, air_data, overall_risk, population_density, prob_risk):
+async def generate_enhanced_summary(climate_data, risks, air_quality_risk, air_data, overall_risk, population_density, prob_risk, latitude,
+            longitude):
     """Generate enhanced summary including probabilistic insights"""
     base_summary = await generate_summary(
         climate_data["rainfall_mm"], climate_data["temperature_c"],
         risks["flood_risk"], risks["heat_risk"], air_quality_risk,
         air_data["aqi"], air_data["pm2_5"], overall_risk,
-        population_density, None
+        population_density, None, latitude, longitude
     )
     
     if prob_risk and prob_risk.get("model_fitted", False):
