@@ -11,7 +11,7 @@ const RisingIssuesPage = () => {
       try {
         setLoading(true);
         // Ensure you are using the correct backend URL and port
-        const response = await fetch('http://localhost:8001/rising-issues');
+        const response = await fetch('https://uplan-backend-156683368413.asia-southeast1.run.app/rising-issues');
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.detail || 'Failed to fetch rising issues.');

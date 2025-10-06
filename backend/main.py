@@ -16,6 +16,7 @@ import time
 import os
 import io
 from io import BytesIO
+import uvicorn
 
 # Probabilistic modeling imports
 from scipy import stats
@@ -2474,5 +2475,5 @@ async def get_interpretability_status():
     }
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)

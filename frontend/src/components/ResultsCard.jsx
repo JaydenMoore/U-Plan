@@ -5,7 +5,7 @@ const ResultsCard = ({ assessment }) => {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [submitSuccess, setSubmitSuccess] = useState(false)
-  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://uplan-backend-156683368413.asia-southeast1.run.app'
 
   const getRiskColor = (risk) => {
     switch (risk) {

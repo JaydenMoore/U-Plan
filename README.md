@@ -103,12 +103,12 @@ Create `.env` file in `/backend` with your API keys:
 
 ```bash
 # Required API Keys
-OPEN_WEATHER_API=Your_OpenWeather_API_Key_Here
+OPEN_WEATHER_API=your_openweather_api_key_here
 
 # Optional API Keys (for enhanced features)
-GOOGLE_API_KEY=AIzaSyArnO_iLwEAsTQkCPKoq3Atm-SxF57ggBk
-SUPABASE_URL=https://cfxdoiwlxlibralnjrpr.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmeGRvaXdseGxpYnJhbG5qcnByIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1OTY0NjUwOSwiZXhwIjoyMDc1MjIyNTA5fQ.CqF9o7EBGlYTcw4bViVsZsIB1ck2V3yI0_XOVK2OUIA
+GOOGLE_API_KEY=your_google_api_key_here
+SUPABASE_URL=your_supabase_url_here
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
 ```
 
 #### ▶️ Run FastAPI
