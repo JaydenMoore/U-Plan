@@ -72,7 +72,7 @@ function debounce(func, wait) {
   }
 }
 
-const Map = forwardRef(({ onLocationClick, assessment }, ref) => {
+const Map = forwardRef(({ onLocationClick, assessment, onToggleResults }, ref) => {
   const mapRef = useRef(null)
   const [markerPosition, setMarkerPosition] = useState(null)
   const [showPopup, setShowPopup] = useState(false)
@@ -808,6 +808,8 @@ const Map = forwardRef(({ onLocationClick, assessment }, ref) => {
           </div>
           <div className="text-xs text-gray-600 space-y-1">
             <p>• Click anywhere on the map to assess climate risks</p>
+            <p>• Use 🚨 button to show/hide risk assessment panel</p>
+            <p>• Use ❓ button to show/hide user guide</p>
             <p>• Use 🔍 Search to find specific locations</p>
             <p>• Use 🛠️ Tools button to access regional grid and options</p>
             <p>• Use 📊 button to show/hide planning legend</p>
@@ -818,6 +820,19 @@ const Map = forwardRef(({ onLocationClick, assessment }, ref) => {
 
       {/* Bottom Left Controls Panel */}
       <div className="absolute bottom-4 left-2 z-[1001] flex flex-col space-y-2">
+        {/* View Results Button */}
+        <button
+          onClick={() => {
+            if (onToggleResults) {
+              onToggleResults()
+            }
+          }}
+          className="bg-white bg-opacity-95 backdrop-blur-sm rounded-lg p-2 shadow-lg border border-gray-200 hover:bg-opacity-100 transition-all duration-200"
+          aria-label="View Results"
+        >
+          🚨
+        </button>
+        
         {/* User Guide Button */}
         <button
           onClick={() => setShowInstructions(!showInstructions)}

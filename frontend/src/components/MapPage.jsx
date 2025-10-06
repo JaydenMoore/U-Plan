@@ -85,24 +85,24 @@ const MapPage = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-900 relative overflow-hidden">
+    <div className="h-screen flex flex-col bg-gray-800 relative overflow-hidden">
       {/* Dynamic Island Navigation */}
       <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[2000]">
-        <div className="bg-black bg-opacity-80 backdrop-blur-lg rounded-full px-6 py-3 shadow-2xl border border-white border-opacity-20">
+        <div className="bg-white bg-opacity-80 backdrop-blur-lg rounded-full px-6 py-3 shadow-2xl border border-white border-opacity-20">
           <div className="flex items-center justify-between space-x-8">
             <Link 
               to="/" 
               className="flex items-center text-white hover:text-blue-300 transition-all duration-300 hover:scale-105"
             >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="black" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
-              <span className="text-sm font-medium">Home</span>
+              <span className="text-sm font-medium text-black">Home</span>
             </Link>
             
             <div className="flex items-center text-white">
               <span className="text-lg mr-2">🌍</span>
-              <h1 className="text-lg font-semibold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+              <h1 className="text-lg font-semibold text-black bg-clip-text text-transparent">
                 Urban Planner AI
               </h1>
             </div>
@@ -117,15 +117,16 @@ const MapPage = () => {
         <Map 
           ref={mapRef}
           onLocationClick={handleLocationClick} 
-          assessment={assessment} 
+          assessment={assessment}
+          onToggleResults={() => setShowResults(!showResults)}
         />
       </div>
 
       {/* Sliding Results Panel */}
-      <div 
-        className={`absolute top-0 right-0 h-full w-96 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out z-[1500] ${
+      <div
+        className={`absolute top-0 right-0 h-full bg-white border-l shadow-lg transition-transform duration-300 ease-in-out z-[1800] ${
           showResults ? 'translate-x-0' : 'translate-x-full'
-        }`}
+        } w-[28rem] overflow-y-auto`}
       >
         <div className="h-full flex flex-col">
           {/* Results Header */}
