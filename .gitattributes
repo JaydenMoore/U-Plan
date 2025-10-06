@@ -1,25 +1,24 @@
 # Track large files with Git LFS
-
 # GIS data formats
 *.tif filter=lfs diff=lfs merge=lfs -text
 *.tif.ovr filter=lfs diff=lfs merge=lfs -text
 *.tfw filter=lfs diff=lfs merge=lfs -text
 *.tif.aux.xml filter=lfs diff=lfs merge=lfs -text
 *.tif.xml filter=lfs diff=lfs merge=lfs -text
-
 # GDB (Geodatabase) files
 *.gdbtable filter=lfs diff=lfs merge=lfs -text
 *.gdbtablx filter=lfs diff=lfs merge=lfs -text
 *.spx filter=lfs diff=lfs merge=lfs -text
 *.atx filter=lfs diff=lfs merge=lfs -text
-
 # Large CSV files
 **/Aqueduct40*.csv filter=lfs diff=lfs merge=lfs -text
-
 # Other large binary formats
 *.pdf filter=lfs diff=lfs merge=lfs -text
 *.xlsx filter=lfs diff=lfs merge=lfs -text
-
 # Specific paths for large data files
 data/gpw/* filter=lfs diff=lfs merge=lfs -text
 data/Aqueduct_WaterRisk/* filter=lfs diff=lfs merge=lfs -text
+data/**/*.tif filter=lfs diff=lfs merge=lfs -text
+data/**/*.tif.ovr filter=lfs diff=lfs merge=lfs -text
+data/**/*.gdbtable filter=lfs diff=lfs merge=lfs -text
+data/**/*.csv filter=lfs diff=lfs merge=lfs -text
