@@ -46,7 +46,7 @@ const RisingIssuesPage = () => {
         <div className="flex justify-between items-center text-sm">
           <span className="text-gray-600">Avg. Risk Score:</span>
           <span className="font-semibold text-white px-2 py-0.5 rounded-full bg-yellow-500">
-            {issue.overall_risk_score_avg ? issue.overall_risk_score_avg.toFixed(1) : 'N/A'}/10
+            {issue.overall_risk_score_avg ? issue.overall_risk_score_avg.toFixed(2) : 'N/A'}/10
           </span>
         </div>
         <div className="flex justify-between items-center text-sm">

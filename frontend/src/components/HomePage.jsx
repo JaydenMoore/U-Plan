@@ -41,6 +41,13 @@ const HomePage = () => {
             >
               📈 Rising Issues
             </Link>
+            <Link 
+              to="/dashboard" 
+              className="inline-flex items-center px-6 py-3 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg shadow hover:shadow-md transition-all duration-300 border-2 border-gray-300"
+              title="Developer Dashboard - System Monitoring"
+            >
+              🔧 Dev Dashboard
+            </Link>
           </div>
         </div>
 
