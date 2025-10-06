@@ -88,8 +88,25 @@ class RiskModelInterpreter:
         
         # Initialize explainer
         if SHAP_AVAILABLE:
-            # Create a wrapper function for SHAP
-            self.explainer = shap.Explainer(self._model_predict_wrapper)
+            # Create background data for SHAP (typical values for each feature)
+            background_data = np.array([
+                [15.0, 0.1, 0.3, 100.0],  # Low risk scenario
+                [25.0, 0.3, 0.5, 500.0],  # Medium risk scenario  
+                [50.0, 0.7, 0.8, 1000.0] # High risk scenario
+            ])
+            
+            # Create a wrapper function for SHAP with background data
+            try:
+                self.explainer = shap.Explainer(self._model_predict_wrapper, background_data)
+            except Exception as e:
+                logger.warning(f"Failed to create SHAP explainer with background data: {e}")
+                # Fallback to Permutation explainer which doesn't need masker
+                try:
+                    self.explainer = shap.explainers.Permutation(self._model_predict_wrapper, background_data)
+                except Exception as e2:
+                    logger.warning(f"Failed to create Permutation explainer: {e2}")
+                    # Use mock explainer as final fallback
+                    self.explainer = MockSHAPExplainer(self._model_predict_wrapper)
         else:
             # Use mock explainer
             self.explainer = MockSHAPExplainer(self._model_predict_wrapper)

@@ -15,7 +15,14 @@ const MapPage = () => {
     console.log('MapPage: handleLocationClick called with:', lat, lng)
     
     // Normalize longitude to be within -180 to 180 degrees
-    const normalizedLng = ((lng + 540) % 360) - 180
+    // Handle very large positive or negative values properly
+    let normalizedLng = lng
+    while (normalizedLng > 180) {
+      normalizedLng -= 360
+    }
+    while (normalizedLng < -180) {
+      normalizedLng += 360
+    }
     console.log('MapPage: Normalized longitude:', normalizedLng)
     
     // Cancel any previous request
@@ -102,8 +109,8 @@ const MapPage = () => {
             
             <div className="flex items-center text-white">
               <span className="text-lg mr-2">🌍</span>
-              <h1 className="text-lg font-semibold text-black bg-clip-text text-transparent">
-                Urban Planner AI
+              <h1 className="text-lg font-semibold text-black bg-clip-text">
+                U-Plan
               </h1>
             </div>
 
@@ -186,16 +193,6 @@ const MapPage = () => {
           </div>
         </div>
       </div>
-
-      {/* Results Toggle Button (for mobile/when panel is hidden) */}
-      {!showResults && (assessment || loading || error) && (
-        <button
-          onClick={() => setShowResults(true)}
-          className="absolute top-20 right-4 z-[1600] bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg shadow-lg transition-all duration-200"
-        >
-          <span className="text-sm font-medium">View Results</span>
-        </button>
-      )}
     </div>
   )
 }

@@ -317,9 +317,9 @@ const ResultsCard = ({ assessment }) => {
       {/* AI Summary */}
       <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
         <h3 className="font-semibold text-purple-800 mb-2">🧠 AI Planning Summary</h3>
-        <p className="text-sm text-purple-700 leading-relaxed">
+        <div className="text-sm text-purple-700 leading-relaxed">
           {formatSummary(assessment.summary)}
-        </p>
+        </div>
       </div>
 
       {/* AI Model Explanation */}
@@ -501,7 +501,7 @@ const ResultsCard = ({ assessment }) => {
                   assessment.comprehensive_flood_risk.risk_level === 'Low' ? 'text-blue-700 bg-blue-100' :
                   'text-green-700 bg-green-100'
                 }`}>
-                  {assessment.comprehensive_flood_risk.combined_score ? 
+                  {assessment.comprehensive_flood_risk.combined_score !== null && assessment.comprehensive_flood_risk.combined_score !== undefined ? 
                     `${(assessment.comprehensive_flood_risk.combined_score * 100).toFixed(1)}%` : 'N/A'}
                 </span>
               </div>
@@ -743,15 +743,15 @@ const ResultsCard = ({ assessment }) => {
 
       {/* Data Source */}
       <div className="text-xs text-gray-500 text-center pt-4 border-t">
-        <p>Climate: NASA POWER API (5-year average 2019-2023)</p>
-        <p>Air Quality: OpenWeatherMap API</p>
-        <p>Population: GPW-v4 (NASA/CIESIN 2020)</p>
-        <p>Flood Risk: NASA MODIS (Near real-time)</p>
-        <p>Historic Floods: Global Flood Database (GFD, 2000-2018)</p>
-        <p>Water Risk: WRI Aqueduct 4.0 Global Maps</p>
-        <p>Risk Modeling: Gaussian Copula with Monte Carlo simulation</p>
+        <div>Climate: NASA POWER API (5-year average 2019-2023)</div>
+        <div>Air Quality: OpenWeatherMap API</div>
+        <div>Population: GPW-v4 (NASA/CIESIN 2020)</div>
+        <div>Flood Risk: NASA MODIS (Near real-time)</div>
+        <div>Historic Floods: Global Flood Database (GFD, 2000-2018)</div>
+        <div>Water Risk: WRI Aqueduct 4.0 Global Maps</div>
+        <div>Risk Modeling: Gaussian Copula with Monte Carlo simulation</div>
         {assessment.model_explanation && (
-          <p>AI Interpretability: SHAP (SHapley Additive exPlanations)</p>
+          <div>AI Interpretability: SHAP (SHapley Additive exPlanations)</div>
         )}
       </div>
     </div>

@@ -453,20 +453,6 @@ if AQUEDUCT_AVAILABLE:
     except Exception as e:
         logger.warning(f"Failed to load Aqueduct water risk data: {e}")
 
-# Initialize historic flood data reader (Global Flood Database)
-historic_flood_dataset = None
-historic_flood_path = "../data/global_flood_frequency.tif"
-if POPULATION_AVAILABLE:  # Use same rasterio availability check
-    if os.path.exists(historic_flood_path):
-        try:
-            import rasterio
-            historic_flood_dataset = rasterio.open(historic_flood_path)
-            logger.info("Historic flood data loaded successfully")
-        except Exception as e:
-            logger.warning(f"Failed to load historic flood data: {e}")
-    else:
-        logger.info(f"Historic flood data file not found at: {historic_flood_path} - using simulated data")
-
 # CORS middleware for frontend access
 
 # CORS middleware for frontend access
@@ -534,6 +520,8 @@ class EnhancedRiskAssessment(RiskAssessment):
     model_explanation: Optional[Dict] = None
     feature_importance: Optional[List[Dict]] = None
     prediction_confidence: Optional[str] = None
+    # Data availability notes
+    missing_data_notes: Optional[List[str]] = None
 
 class ModelExplanationResponse(BaseModel):
     """Response model for AI model explanations"""
@@ -792,11 +780,28 @@ async def assess_location_enhanced(location: LocationRequest):
         if not (-180 <= location.longitude <= 180):
             raise HTTPException(status_code=400, detail="Invalid longitude")
         
-        # Fetch data from multiple sources concurrently
-        nasa_data_task = fetch_nasa_power_data_async(location.latitude, location.longitude)
-        air_data_task = fetch_air_pollution_data_async(location.latitude, location.longitude)
+        # Fetch data from multiple sources concurrently with fallback handling
+        climate_data = None
+        air_data = None
+        missing_data_notes = []
         
-        climate_data, air_data = await asyncio.gather(nasa_data_task, air_data_task)
+        # Try NASA data
+        try:
+            climate_data = await fetch_nasa_power_data_async(location.latitude, location.longitude)
+            logger.info("NASA POWER data fetched successfully")
+        except Exception as e:
+            logger.warning(f"NASA POWER API failed: {e}")
+            climate_data = get_fallback_climate_data(location.latitude, location.longitude)
+            missing_data_notes.append("NASA climate data unavailable - using simulated values")
+        
+        # Try air pollution data
+        try:
+            air_data = await fetch_air_pollution_data_async(location.latitude, location.longitude)
+            logger.info("Air pollution data fetched successfully")
+        except Exception as e:
+            logger.warning(f"Air pollution API failed: {e}")
+            air_data = get_fallback_air_data(location.latitude, location.longitude)
+            missing_data_notes.append("Air quality data unavailable - using estimated values")
         
         # Get population and flood data as before
         population_density = None
@@ -809,8 +814,29 @@ async def assess_location_enhanced(location: LocationRequest):
                 logger.warning(f"Failed to get population data: {e}")
                 population_density = 100.0  # Default value
         
-        flood_data = fetch_nasa_modis_flood_data(location.latitude, location.longitude)
-        historic_flood_data = fetch_historic_flood_frequency(location.latitude, location.longitude)
+        # Get flood data with fallback
+        flood_data = None
+        try:
+            flood_data = fetch_nasa_modis_flood_data(location.latitude, location.longitude)
+        except Exception as e:
+            logger.warning(f"MODIS flood data failed: {e}")
+            flood_data = {
+                "flood_risk": 0.0, 
+                "message": "Flood data unavailable - using default values",
+                "severity": "Unknown",
+                "flood_pixels": 0,
+                "total_pixels": 1
+            }
+            missing_data_notes.append("MODIS flood data unavailable - using default values")
+        
+        # Get historic flood data with fallback
+        historic_flood_data = None
+        try:
+            historic_flood_data = fetch_historic_flood_frequency(location.latitude, location.longitude)
+        except Exception as e:
+            logger.warning(f"Historic flood data failed: {e}")
+            historic_flood_data = {"flood_frequency": 0.0, "category": "Unknown"}
+            missing_data_notes.append("Historic flood data unavailable - using default values")
         
         # Get water risk data from Aqueduct
         water_risk_data = None
@@ -997,7 +1023,9 @@ async def assess_location_enhanced(location: LocationRequest):
             # AI interpretability fields
             model_explanation=model_explanation,
             feature_importance=feature_importance,
-            prediction_confidence=prediction_confidence
+            prediction_confidence=prediction_confidence,
+            # Data availability notes
+            missing_data_notes=missing_data_notes if missing_data_notes else None
         )
         
     except Exception as e:
@@ -1250,6 +1278,58 @@ def get_fallback_climate_data(lat: float, lng: float) -> Dict[str, float]:
     return {
         "rainfall_mm": round(rainfall, 2),
         "temperature_c": round(temp, 2)
+    }
+
+def get_fallback_air_data(lat: float, lng: float) -> Dict[str, float]:
+    """Provide reasonable fallback air quality data when OpenWeatherMap API fails"""
+    # Estimate air quality based on location characteristics
+    # Urban areas tend to have higher pollution
+    if abs(lat) < 5:  # Near equator - typically less industrialized
+        pm2_5 = 15.0
+        pm10 = 25.0
+        aqi = 2
+        no2 = 20.0
+        o3 = 60.0
+        co = 0.3
+    elif abs(lat) > 60:  # Arctic regions - typically cleaner
+        pm2_5 = 5.0
+        pm10 = 10.0
+        aqi = 1
+        no2 = 10.0
+        o3 = 40.0
+        co = 0.2
+    else:  # Temperate regions - moderate pollution
+        pm2_5 = 12.0
+        pm10 = 20.0
+        aqi = 2
+        no2 = 15.0
+        o3 = 50.0
+        co = 0.25
+    
+    # Rough adjustments for major population centers (very simplified)
+    # This is just an estimation - real data would be much more accurate
+    if -125 < lng < -70 and 25 < lat < 50:  # North America populated areas
+        pm2_5 *= 1.2
+        no2 *= 1.3
+        aqi = min(aqi + 1, 5)
+    elif -10 < lng < 40 and 35 < lat < 70:  # Europe
+        pm2_5 *= 1.1
+        no2 *= 1.2
+    elif 70 < lng < 140 and 20 < lat < 50:  # East Asia
+        pm2_5 *= 1.5
+        no2 *= 1.4
+        aqi = min(aqi + 1, 5)
+    
+    logger.info(f"Using fallback air quality data for {lat}, {lng}: PM2.5={pm2_5}, AQI={aqi}")
+    return {
+        "pm2_5": round(pm2_5, 1),
+        "pm10": round(pm10, 1),
+        "aqi": aqi,
+        "no2": round(no2, 1),
+        "o3": round(o3, 1),
+        "co": round(co, 2),
+        "air_quality_index": aqi,  # For compatibility
+        "air_quality_risk": "Moderate" if aqi >= 3 else "Low"
     }
 
 # Initialize cache for the async function

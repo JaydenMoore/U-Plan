@@ -1184,7 +1184,7 @@ const Map = forwardRef(({ onLocationClick, assessment, onToggleResults }, ref) =
       )}
 
       {/* Custom CSS for colored markers */}
-      <style jsx>{`
+      <style>{`
         .blue-marker {
           filter: hue-rotate(240deg) saturate(150%);
         }
