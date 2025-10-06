@@ -1,0 +1,165 @@
+{
+  "locations_data": [
+    {
+      "name": "Phoenix, AZ",
+      "lat": 33.4484,
+      "lon": -112.074,
+      "expected_heat": "High",
+      "expected_flood": "Low",
+      "avg_rainfall_mm": 0.7046153846153846,
+      "avg_temp_c": 22.754615384615384,
+      "max_temp_c": 34.8
+    },
+    {
+      "name": "Dubai, UAE",
+      "lat": 25.2048,
+      "lon": 55.2708,
+      "expected_heat": "High",
+      "expected_flood": "Low",
+      "avg_rainfall_mm": 0.29615384615384616,
+      "avg_temp_c": 28.86,
+      "max_temp_c": 36.02
+    },
+    {
+      "name": "Mumbai, India",
+      "lat": 19.076,
+      "lon": 72.8777,
+      "expected_heat": "High",
+      "expected_flood": "High",
+      "avg_rainfall_mm": 8.022307692307693,
+      "avg_temp_c": 26.77769230769231,
+      "max_temp_c": 31.35
+    },
+    {
+      "name": "Singapore",
+      "lat": 1.3521,
+      "lon": 103.8198,
+      "expected_heat": "High",
+      "expected_flood": "Medium",
+      "avg_rainfall_mm": 11.272307692307692,
+      "avg_temp_c": 27.22846153846154,
+      "max_temp_c": 28.35
+    },
+    {
+      "name": "London, UK",
+      "lat": 51.5074,
+      "lon": -0.1278,
+      "expected_heat": "Low",
+      "expected_flood": "Medium",
+      "avg_rainfall_mm": 2.0507692307692307,
+      "avg_temp_c": 10.98923076923077,
+      "max_temp_c": 18.3
+    },
+    {
+      "name": "Tokyo, Japan",
+      "lat": 35.6762,
+      "lon": 139.6503,
+      "expected_heat": "Medium",
+      "expected_flood": "Medium",
+      "avg_rainfall_mm": 4.827692307692308,
+      "avg_temp_c": 14.566923076923077,
+      "max_temp_c": 26.42
+    },
+    {
+      "name": "Sydney, Australia",
+      "lat": -33.8688,
+      "lon": 151.2093,
+      "expected_heat": "Medium",
+      "expected_flood": "Low",
+      "avg_rainfall_mm": 3.0999999999999996,
+      "avg_temp_c": 18.58230769230769,
+      "max_temp_c": 22.89
+    },
+    {
+      "name": "Seattle, WA",
+      "lat": 47.6062,
+      "lon": -122.3321,
+      "expected_heat": "Low",
+      "expected_flood": "High",
+      "avg_rainfall_mm": 3.5330769230769232,
+      "avg_temp_c": 10.788461538461538,
+      "max_temp_c": 19.07
+    },
+    {
+      "name": "Oslo, Norway",
+      "lat": 59.9139,
+      "lon": 10.7522,
+      "expected_heat": "Low",
+      "expected_flood": "Low",
+      "avg_rainfall_mm": 2.8969230769230765,
+      "avg_temp_c": 5.03,
+      "max_temp_c": 16.29
+    },
+    {
+      "name": "Moscow, Russia",
+      "lat": 55.7558,
+      "lon": 37.6173,
+      "expected_heat": "Low",
+      "expected_flood": "Medium",
+      "avg_rainfall_mm": 2.356153846153846,
+      "avg_temp_c": 4.450769230769231,
+      "max_temp_c": 18.7
+    },
+    {
+      "name": "Bangkok, Thailand",
+      "lat": 13.7563,
+      "lon": 100.5018,
+      "expected_heat": "High",
+      "expected_flood": "High",
+      "avg_rainfall_mm": 4.241538461538462,
+      "avg_temp_c": 27.915384615384614,
+      "max_temp_c": 30.65
+    },
+    {
+      "name": "Dhaka, Bangladesh",
+      "lat": 23.8103,
+      "lon": 90.4125,
+      "expected_heat": "High",
+      "expected_flood": "High",
+      "avg_rainfall_mm": 6.826153846153845,
+      "avg_temp_c": 25.439230769230768,
+      "max_temp_c": 29.68
+    },
+    {
+      "name": "Cairo, Egypt",
+      "lat": 30.0444,
+      "lon": 31.2357,
+      "expected_heat": "High",
+      "expected_flood": "Low",
+      "avg_rainfall_mm": 0.46384615384615385,
+      "avg_temp_c": 22.037692307692307,
+      "max_temp_c": 30.61
+    },
+    {
+      "name": "Vancouver, Canada",
+      "lat": 49.2827,
+      "lon": -123.1207,
+      "expected_heat": "Low",
+      "expected_flood": "High",
+      "avg_rainfall_mm": 5.590769230769231,
+      "avg_temp_c": 7.206153846153847,
+      "max_temp_c": 17.19
+    },
+    {
+      "name": "Wellington, NZ",
+      "lat": -41.2865,
+      "lon": 174.7762,
+      "expected_heat": "Low",
+      "expected_flood": "Medium",
+      "avg_rainfall_mm": 3.0684615384615386,
+      "avg_temp_c": 13.476923076923075,
+      "max_temp_c": 16.96
+    }
+  ],
+  "thresholds": {
+    "heat_thresholds": {
+      "low_to_medium": 14.021923076923077,
+      "medium_to_high": 20.31
+    },
+    "flood_thresholds": {
+      "low_to_medium": 2.575384615384615,
+      "medium_to_high": 7.402692307692307
+    }
+  },
+  "timestamp": "2025-10-05 22:09:20"
+}
