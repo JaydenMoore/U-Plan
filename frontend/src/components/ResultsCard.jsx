@@ -220,7 +220,7 @@ const ResultsCard = ({ assessment }) => {
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-gray-700">📊 Expected Risk Level</span>
                     <span className="text-lg font-bold text-purple-600">
-                      {assessment.probabilistic_risk.expected_risk.toFixed(1)}
+                      {assessment.probabilistic_risk.expected_risk.toFixed(2)}
                     </span>
                   </div>
                   <div className="text-xs text-gray-600">
@@ -234,11 +234,11 @@ const ResultsCard = ({ assessment }) => {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-gray-700">📈 Confidence Range</span>
                       <span className="text-sm font-bold text-indigo-600">
-                        {assessment.risk_confidence_interval.lower_bound.toFixed(1)} - {assessment.risk_confidence_interval.upper_bound.toFixed(1)}
+                        {assessment.risk_confidence_interval.lower_bound.toFixed(2)} - {assessment.risk_confidence_interval.upper_bound.toFixed(2)}
                       </span>
                     </div>
                     <div className="text-xs text-gray-600 mb-1">
-                      90% confidence interval • Median: {assessment.risk_confidence_interval.median.toFixed(1)}
+                      90% confidence interval • Median: {assessment.risk_confidence_interval.median.toFixed(2)}
                     </div>
                     <div className="text-xs text-gray-500">
                       Range shows uncertainty in risk estimates
@@ -266,19 +266,19 @@ const ResultsCard = ({ assessment }) => {
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div className="flex justify-between">
                         <span className="text-gray-600">Water Stress:</span>
-                        <span className="font-medium">{assessment.water_risk.baseline_water_stress}/5</span>
+                        <span className="font-medium">{assessment.water_risk.baseline_water_stress.toFixed(2)}/5</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Drought Risk:</span>
-                        <span className="font-medium">{assessment.water_risk.drought_risk}/5</span>
+                        <span className="font-medium">{assessment.water_risk.drought_risk.toFixed(2)}/5</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Flood Risk:</span>
-                        <span className="font-medium">{assessment.water_risk.flood_risk_score}/5</span>
+                        <span className="font-medium">{assessment.water_risk.flood_risk_score.toFixed(2)}/5</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Overall:</span>
-                        <span className="font-medium">{assessment.water_risk.overall_water_risk}/5</span>
+                        <span className="font-medium">{assessment.water_risk.overall_water_risk.toFixed(2)}/5</span>
                       </div>
                     </div>
                     
@@ -322,81 +322,6 @@ const ResultsCard = ({ assessment }) => {
         </div>
       </div>
 
-      {/* AI Model Explanation */}
-      {assessment.model_explanation && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h3 className="font-semibold text-blue-800 mb-3">🤖 AI Model Explanation</h3>
-          
-          {/* Prediction Details */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="bg-white rounded-lg p-3 shadow-sm">
-              <div className="text-sm font-medium text-gray-700 mb-1">Prediction Value</div>
-              <div className="text-lg font-bold text-blue-600">
-                {assessment.model_explanation.prediction?.toFixed(2)}
-              </div>
-            </div>
-            <div className="bg-white rounded-lg p-3 shadow-sm">
-              <div className="text-sm font-medium text-gray-700 mb-1">Confidence Level</div>
-              <div className={`text-lg font-bold ${
-                assessment.prediction_confidence === 'High' ? 'text-green-600' :
-                assessment.prediction_confidence === 'Medium' ? 'text-yellow-600' : 'text-red-600'
-              }`}>
-                {assessment.prediction_confidence || 'Unknown'}
-              </div>
-            </div>
-          </div>
-
-          {/* Feature Importance */}
-          {assessment.feature_importance && assessment.feature_importance.length > 0 && (
-            <div className="bg-white rounded-lg p-3 shadow-sm mb-3">
-              <div className="text-sm font-medium text-gray-700 mb-3">🎯 Feature Importance</div>
-              <div className="space-y-2">
-                {assessment.feature_importance.map((feature, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <span className={`w-2 h-2 rounded-full ${
-                        feature.direction === 'increases' ? 'bg-red-400' : 'bg-green-400'
-                      }`}></span>
-                      <span className="text-sm text-gray-700 capitalize">
-                        {feature.feature.replace('_', ' ')}
-                      </span>
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        feature.direction === 'increases' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-                      }`}>
-                        {feature.direction} risk
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-16 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full ${
-                            feature.direction === 'increases' ? 'bg-red-400' : 'bg-green-400'
-                          }`}
-                          style={{ width: `${Math.min(feature.importance * 50, 100)}%` }}
-                        ></div>
-                      </div>
-                      <span className="text-xs text-gray-500 w-12 text-right">
-                        {(feature.importance * 100).toFixed(0)}%
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Natural Language Explanation */}
-          {assessment.model_explanation.explanation_text && (
-            <div className="bg-white rounded-lg p-3 shadow-sm">
-              <div className="text-sm font-medium text-gray-700 mb-2">📝 Detailed Explanation</div>
-              <div className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
-                {assessment.model_explanation.explanation_text}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* ===== DATA SECTIONS (Organized by Category) ===== */}
 
       {/* Climate Data */}
@@ -407,14 +332,14 @@ const ResultsCard = ({ assessment }) => {
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-white rounded-lg p-3 text-center shadow-sm">
             <div className="text-3xl font-bold text-blue-600">
-              {assessment.rainfall_mm}
+              {assessment.rainfall_mm.toFixed(2)}
             </div>
             <div className="text-xs text-gray-500 mt-1">mm/month</div>
             <div className="text-sm font-medium text-gray-700">💧 Rainfall</div>
           </div>
           <div className="bg-white rounded-lg p-3 text-center shadow-sm">
             <div className="text-3xl font-bold text-orange-600">
-              {assessment.temperature_c}°C
+              {assessment.temperature_c.toFixed(2)}°C
             </div>
             <div className="text-xs text-gray-500 mt-1">average</div>
             <div className="text-sm font-medium text-gray-700">🌡️ Temperature</div>
@@ -440,7 +365,7 @@ const ResultsCard = ({ assessment }) => {
                   assessment.flood_risk_score > 0 ? 'text-yellow-700 bg-yellow-100' :
                   'text-green-700 bg-green-100'
                 }`}>
-                  {(assessment.flood_risk_score * 100).toFixed(1)}%
+                  {(assessment.flood_risk_score * 100).toFixed(2)}%
                 </span>
               </div>
               <div className="text-xs text-gray-600 mb-2">
@@ -470,7 +395,7 @@ const ResultsCard = ({ assessment }) => {
                   assessment.historic_flood_frequency > 0 ? 'text-yellow-700 bg-yellow-100' :
                   'text-green-700 bg-green-100'
                 }`}>
-                  {(assessment.historic_flood_frequency * 100).toFixed(1)}%
+                  {(assessment.historic_flood_frequency * 100).toFixed(2)}%
                 </span>
               </div>
               <div className="text-xs text-gray-600 mb-2">
@@ -502,7 +427,7 @@ const ResultsCard = ({ assessment }) => {
                   'text-green-700 bg-green-100'
                 }`}>
                   {assessment.comprehensive_flood_risk.combined_score !== null && assessment.comprehensive_flood_risk.combined_score !== undefined ? 
-                    `${(assessment.comprehensive_flood_risk.combined_score * 100).toFixed(1)}%` : 'N/A'}
+                    `${(assessment.comprehensive_flood_risk.combined_score * 100).toFixed(2)}%` : 'N/A'}
                 </span>
               </div>
               <div className="text-sm font-medium text-gray-800 mb-2">
@@ -569,7 +494,7 @@ const ResultsCard = ({ assessment }) => {
               </div>
               <div className="bg-white rounded-lg p-2 text-center shadow-sm">
                 <div className="text-2xl font-bold text-indigo-600">
-                  {assessment.pm2_5?.toFixed(1)}
+                  {assessment.pm2_5?.toFixed(2)}
                 </div>
                 <div className="text-xs text-gray-500 mt-1">μg/m³</div>
                 <div className="text-sm font-medium text-gray-700">💨 PM2.5</div>
@@ -577,7 +502,7 @@ const ResultsCard = ({ assessment }) => {
               {assessment.pm10 && (
                 <div className="bg-white rounded-lg p-2 text-center shadow-sm">
                   <div className="text-xl font-bold text-blue-600">
-                    {assessment.pm10?.toFixed(1)}
+                    {assessment.pm10?.toFixed(2)}
                   </div>
                   <div className="text-xs text-gray-500 mt-1">μg/m³</div>
                   <div className="text-sm font-medium text-gray-700">🌫️ PM10</div>
@@ -596,7 +521,7 @@ const ResultsCard = ({ assessment }) => {
             
             {assessment.pm2_5_raw && (
               <div className="text-xs text-gray-500 mt-1 text-center">
-                Raw PM2.5: {assessment.pm2_5_raw?.toFixed(1)} μg/m³ | Calibrated: {assessment.pm2_5?.toFixed(1)} μg/m³
+                Raw PM2.5: {assessment.pm2_5_raw?.toFixed(2)} μg/m³ | Calibrated: {assessment.pm2_5?.toFixed(2)} μg/m³
               </div>
             )}
           </div>
@@ -629,19 +554,19 @@ const ResultsCard = ({ assessment }) => {
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="flex justify-between">
                 <span className="text-gray-600">Water Stress:</span>
-                <span className="font-medium">{assessment.water_risk.baseline_water_stress}/5</span>
+                <span className="font-medium">{assessment.water_risk.baseline_water_stress.toFixed(2)}/5</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Drought Risk:</span>
-                <span className="font-medium">{assessment.water_risk.drought_risk}/5</span>
+                <span className="font-medium">{assessment.water_risk.drought_risk.toFixed(2)}/5</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Flood Risk:</span>
-                <span className="font-medium">{assessment.water_risk.flood_risk_score}/5</span>
+                <span className="font-medium">{assessment.water_risk.flood_risk_score.toFixed(2)}/5</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Overall:</span>
-                <span className="font-medium">{assessment.water_risk.overall_water_risk}/5</span>
+                <span className="font-medium">{assessment.water_risk.overall_water_risk.toFixed(2)}/5</span>
               </div>
             </div>
             
@@ -665,7 +590,7 @@ const ResultsCard = ({ assessment }) => {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-gray-700">🎯 Point Density</span>
                 <span className="text-lg font-bold text-orange-600">
-                  {assessment.population_density?.toFixed(1)} people/km²
+                  {assessment.population_density?.toFixed(2)} people/km²
                 </span>
               </div>
               <div className="text-xs text-gray-500">

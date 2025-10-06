@@ -434,6 +434,10 @@ const Map = forwardRef(({ onLocationClick, assessment, onToggleResults }, ref) =
     setSearchResults([])
     setShowSearch(false)
     
+    // Set marker position to show the searched location
+    setMarkerPosition([lat, lng])
+    setShowPopup(true)
+    
     // Determine appropriate zoom level based on result type
     let targetZoom = 15 // Default for cities
     if (result.type === 'house' || result.type === 'building') {
@@ -719,7 +723,7 @@ const Map = forwardRef(({ onLocationClick, assessment, onToggleResults }, ref) =
                             <div className="flex items-center justify-between text-xs">
                               <span>💨 PM2.5:</span>
                               <span className="font-medium text-gray-700">
-                                {popupData.airQualityData.pm2_5.toFixed(1)} μg/m³
+                                {popupData.airQualityData.pm2_5.toFixed(2)} μg/m³
                               </span>
                             </div>
                             <div className="flex items-center justify-between text-xs">
