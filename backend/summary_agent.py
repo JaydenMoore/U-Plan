@@ -16,26 +16,44 @@ if GOOGLE_API_KEY:
 else:
     logger.info("GOOGLE_API_KEY not set; using rule-based summaries.")
 
-def _build_summary_prompt(rainfall: float, temperature: float, flood_risk: str, heat_risk: str, 
-                          air_quality_risk: str, aqi: int, pm2_5: float, overall_risk: float,
-                          population_density: float = None, population_stats: dict = None) -> str:
+def _build_summary_prompt(rainfall: float = None, temperature: float = None, flood_risk: str = None, heat_risk: str = None, 
+                          air_quality_risk: str = None, aqi: int = None, pm2_5: float = None, overall_risk: float = None,
+                          population_density: float = None, population_stats: dict = None, latitud: float = None, longitude: float = None) -> str:
+    
+    pm2_5_display = f"{pm2_5:.1f}" if pm2_5 is not None else "N/A"
+    rainfall_display = f"{rainfall:.1f}" if rainfall is not None else "N/A"
+    temperature_display = f"{temperature:.1f}" if temperature is not None else "N/A"
+    flood_risk_display = flood_risk if flood_risk is not None else "N/A"
+    heat_risk_display = heat_risk if heat_risk is not None else "N/A"
+    air_quality_risk_display = air_quality_risk if air_quality_risk is not None else "N/A"
+    aqi_display = aqi if aqi is not None else "N/A"
+    overall_risk_display = f"{overall_risk:.1f}" if overall_risk is not None else "N/A"
+    population_density_display = f"{population_density:.1f}" if population_density is not None else "N/A"
+    population_stats_display = population_stats if population_stats is not None else "N/A"
+    latitud = latitud if latitud is not None else "N/A"
+    longitude = longitude if longitude is not None else "N/A"
+
+
     return f"""
 You are an urban planning assistant. Create a concise, actionable planning summary (max 120 words).
 Use clear, neutral language with a few relevant emojis similar to existing UI.
+Give their state and country name based on the latitud and longitude provided
 
 Inputs:
-- Rainfall (mm/month avg): {rainfall}
-- Temperature (°C avg): {temperature}
-- Flood Risk: {flood_risk}
-- Heat Risk: {heat_risk}
-- Air Quality Risk: {air_quality_risk}
-- AQI: {aqi}
-- PM2.5 (μg/m³): {pm2_5:.1f}
-- Overall Risk Score (0-10): {overall_risk}
-- Population Density: {population_density}
-- Population Statistics: {population_stats}
+- Location: {latitud, longitude} 
+- Rainfall (mm/month avg): {rainfall_display}
+- Temperature (°C avg): {temperature_display}
+- Flood Risk: {flood_risk_display}
+- Heat Risk: {heat_risk_display}
+- Air Quality Risk: {air_quality_risk_display}
+- AQI: {aqi_display}
+- PM2.5 (μg/m³): {pm2_5_display}
+- Overall Risk Score (0-10): {overall_risk_display}
+- Population Density: {population_density_display}
+- Population Statistics: {population_stats_display}
 
 Output guidance:
+Give specialized city planning guidance for their state, country from their location provided in latitud and longitude.
 List down in point form overall risk score, environmental risk (air quality, flood and heat risk) and if population density insight if data is provided. (with suggestions associated with the value)
 Call out any "high" risks with clear mitigations
 Bold "high" or "low"
@@ -50,9 +68,10 @@ def _gemini_generate(prompt: str) -> str:
     txt = getattr(resp, "text", None)
     return txt.strip() if txt else "Summary unavailable."
 
-async def generate_summary(rainfall: float, temperature: float, flood_risk: str, heat_risk: str, 
-                           air_quality_risk: str, aqi: int, pm2_5: float, overall_risk: float,
-                           population_density: float = None, population_stats: dict = None) -> str:
+async def generate_summary(rainfall: float = None, temperature: float = None, flood_risk: str = None, heat_risk: str = None, 
+                           air_quality_risk: str = None, aqi: int = None, pm2_5: float = None, overall_risk: float = None,
+                           population_density: float = None, population_stats: dict = None
+                           , latitud: float = None, longitude: float = None) -> str:
     if GOOGLE_API_KEY:
         try:
             logger.info("Generating summary with Google LLM (Gemini).")
@@ -63,59 +82,64 @@ async def generate_summary(rainfall: float, temperature: float, flood_risk: str,
         except Exception as e:
             logging.getLogger(__name__).warning(f"LLM summary failed, using rule-based. Error: {e}")
     logger.info("Generating summary with rule-based logic.")
-    return generate_summary_rule_based(rainfall, temperature, flood_risk, heat_risk, air_quality_risk, aqi, pm2_5, overall_risk, population_density, population_stats)
+    return generate_summary_rule_based(rainfall, temperature, flood_risk, heat_risk, air_quality_risk, aqi, pm2_5, overall_risk, population_density, population_stats, latitud, longitude)
 
-def generate_summary_rule_based(rainfall: float, temperature: float, flood_risk: str, heat_risk: str, 
-                    air_quality_risk: str, aqi: int, pm2_5: float, overall_risk: float,
+def generate_summary_rule_based(rainfall: float = None, temperature: float = None, flood_risk: str = None, heat_risk: str = None, 
+                    air_quality_risk: str = None, aqi: int = None, pm2_5: float = None, overall_risk: float = None,
                     population_density: float = None, population_stats: dict = None) -> str:
     """Generate a comprehensive summary for urban planning including population context"""
     
     summary_parts = []
     
     # Climate conditions
-    if temperature > 35:
-        summary_parts.append("Extreme heat conditions require robust cooling infrastructure and heat island mitigation.")
-    elif temperature > 30:
-        summary_parts.append("Hot climate requires cooling infrastructure and energy-efficient building design.")
-    elif temperature < 5:
-        summary_parts.append("Cold climate requires heating systems and weatherization measures.")
-    elif temperature < 10:
-        summary_parts.append("Cool climate requires heating considerations and insulation standards.")
-    else:
-        summary_parts.append("Moderate temperature conditions support diverse development options.")
+    if temperature is not None:
+        if temperature > 35:
+            summary_parts.append("Extreme heat conditions require robust cooling infrastructure and heat island mitigation.")
+        elif temperature > 30:
+            summary_parts.append("Hot climate requires cooling infrastructure and energy-efficient building design.")
+        elif temperature < 5:
+            summary_parts.append("Cold climate requires heating systems and weatherization measures.")
+        elif temperature < 10:
+            summary_parts.append("Cool climate requires heating considerations and insulation standards.")
+        else:
+            summary_parts.append("Moderate temperature conditions support diverse development options.")
     
     # Rainfall conditions
-    if rainfall > 150:
-        summary_parts.append("High rainfall area - implement comprehensive stormwater management, flood-resistant construction, and elevated foundations.")
-    elif rainfall > 100:
-        summary_parts.append("Above-average rainfall - ensure robust drainage systems and consider permeable surfaces.")
-    elif rainfall < 30:
-        summary_parts.append("Arid conditions - plan for water conservation, drought-resistant landscaping, and water storage.")
-    elif rainfall < 50:
-        summary_parts.append("Low rainfall area - consider water supply planning and efficient irrigation systems.")
-    else:
-        summary_parts.append("Moderate rainfall conditions support standard urban development practices.")
+    if rainfall is not None:
+        if rainfall > 150:
+            summary_parts.append("High rainfall area - implement comprehensive stormwater management, flood-resistant construction, and elevated foundations.")
+        elif rainfall > 100:
+            summary_parts.append("Above-average rainfall - ensure robust drainage systems and consider permeable surfaces.")
+        elif rainfall < 30:
+            summary_parts.append("Arid conditions - plan for water conservation, drought-resistant landscaping, and water storage.")
+        elif rainfall < 50:
+            summary_parts.append("Low rainfall area - consider water supply planning and efficient irrigation systems.")
+        else:
+            summary_parts.append("Moderate rainfall conditions support standard urban development practices.")
     
     # Air quality conditions
-    if air_quality_risk == "High":
-        summary_parts.append(f"🏭 HIGH AIR POLLUTION RISK (AQI {aqi}, PM2.5: {pm2_5:.1f}): Air filtration systems, green barriers, and emission controls essential.")
-    elif air_quality_risk == "Medium":
-        summary_parts.append(f"🌫️ MODERATE AIR POLLUTION (AQI {aqi}): Consider air quality monitoring and green infrastructure.")
-    elif air_quality_risk == "Low":
-        summary_parts.append(f"🌿 GOOD AIR QUALITY (AQI {aqi}): Favorable conditions for outdoor activities and development.")
-    else:
-        summary_parts.append(f"✨ EXCELLENT AIR QUALITY (AQI {aqi}): Optimal conditions for all development types.")
+    if air_quality_risk is not None and aqi is not None and pm2_5 is not None:
+        if air_quality_risk == "High":
+            summary_parts.append(f"🏭 HIGH AIR POLLUTION RISK (AQI {aqi}, PM2.5: {pm2_5:.1f}): Air filtration systems, green barriers, and emission controls essential.")
+        elif air_quality_risk == "Medium":
+            summary_parts.append(f"🌫️ MODERATE AIR POLLUTION (AQI {aqi}): Consider air quality monitoring and green infrastructure.")
+        elif air_quality_risk == "Low":
+            summary_parts.append(f"🌿 GOOD AIR QUALITY (AQI {aqi}): Favorable conditions for outdoor activities and development.")
+        else:
+            summary_parts.append(f"✨ EXCELLENT AIR QUALITY (AQI {aqi}): Optimal conditions for all development types.")
     
     # Risk warnings and recommendations
-    if flood_risk == "High":
-        summary_parts.append("⚠️ HIGH FLOOD RISK: Mandatory flood mitigation measures, restrict development in flood-prone areas.")
-    elif flood_risk == "Medium":
-        summary_parts.append("⚡ MODERATE FLOOD RISK: Implement flood-resistant design and drainage improvements.")
+    if flood_risk is not None:
+        if flood_risk == "High":
+            summary_parts.append("⚠️ HIGH FLOOD RISK: Mandatory flood mitigation measures, restrict development in flood-prone areas.")
+        elif flood_risk == "Medium":
+            summary_parts.append("⚡ MODERATE FLOOD RISK: Implement flood-resistant design and drainage improvements.")
     
-    if heat_risk == "High":
-        summary_parts.append("🌡️ HIGH HEAT RISK: Urban heat island mitigation, green infrastructure, and cooling centers recommended.")
-    elif heat_risk == "Medium":
-        summary_parts.append("☀️ MODERATE HEAT RISK: Consider heat management strategies and green building standards.")
+    if heat_risk is not None:
+        if heat_risk == "High":
+            summary_parts.append("🌡️ HIGH HEAT RISK: Urban heat island mitigation, green infrastructure, and cooling centers recommended.")
+        elif heat_risk == "Medium":
+            summary_parts.append("☀️ MODERATE HEAT RISK: Consider heat management strategies and green building standards.")
     
     # Population context
     if population_density is not None:
@@ -141,13 +165,17 @@ def generate_summary_rule_based(rainfall: float, temperature: float, flood_risk:
                 summary_parts.append(f"📊 VARIABLE POPULATION DENSITY in area: peaks at {max_density:.1f} people/km² with clusters requiring targeted infrastructure.")
     
     # Overall recommendation based on combined risk score
-    if overall_risk >= 7:
-        summary_parts.append(f"⚠️ HIGH OVERALL RISK (Score: {overall_risk}/10): Comprehensive mitigation strategies required before development.")
-    elif overall_risk >= 5:
-        summary_parts.append(f"⚡ MODERATE OVERALL RISK (Score: {overall_risk}/10): Enhanced planning and risk management recommended.")
-    elif overall_risk >= 3:
-        summary_parts.append(f"✅ LOW OVERALL RISK (Score: {overall_risk}/10): Standard development practices with basic precautions.")
-    else:
-        summary_parts.append(f"🌟 VERY LOW OVERALL RISK (Score: {overall_risk}/10): Excellent conditions for urban development.")
+    if overall_risk is not None:
+        if overall_risk >= 7:
+            summary_parts.append(f"⚠️ HIGH OVERALL RISK (Score: {overall_risk}/10): Comprehensive mitigation strategies required before development.")
+        elif overall_risk >= 5:
+            summary_parts.append(f"⚡ MODERATE OVERALL RISK (Score: {overall_risk}/10): Enhanced planning and risk management recommended.")
+        elif overall_risk >= 3:
+            summary_parts.append(f"✅ LOW OVERALL RISK (Score: {overall_risk}/10): Standard development practices with basic precautions.")
+        else:
+            summary_parts.append(f"🌟 VERY LOW OVERALL RISK (Score: {overall_risk}/10): Excellent conditions for urban development.")
     
+    if not summary_parts:
+        return "Insufficient data for summary."
+
     return " ".join(summary_parts)
