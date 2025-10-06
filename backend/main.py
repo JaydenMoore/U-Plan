@@ -996,7 +996,7 @@ async def assess_location_enhanced(location: LocationRequest):
         # Generate enhanced summary
         summary = await generate_enhanced_summary(
             climate_data, risks, air_quality_risk, air_data, 
-            overall_risk, population_density, prob_risk
+            overall_risk, population_density, prob_risk, location.latitude, location.longitude
         )
         
         # Prepare confidence interval data
